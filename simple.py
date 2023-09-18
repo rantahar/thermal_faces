@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 data_path = "data/train_data"
 batch_size = 2
 learning_rate = 0.001
+label_loss_weight = 24576
+num_epochs = 5
 
 
 def display_image(temperature_image, target_image):
@@ -93,10 +95,10 @@ for video in val_data:
 class FaceDetector(nn.Module):
     def __init__(self):
         super(FaceDetector, self).__init__()
-        self.conv1 = nn.Conv2d(1, 4, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(4, 1, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
     
@@ -122,7 +124,9 @@ def compute_loss(predictions, targets):
 
     predictions = predictions.view(-1)
     targets = targets.view(-1)
-    loss = nn.functional.binary_cross_entropy(predictions, targets, reduction='sum')
+    weights = torch.ones_like(targets)
+    weights[targets == 1] = label_loss_weight
+    loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='sum')
     return loss / batch_size
 
 def calculate_accuracy(predictions, labels):
@@ -135,24 +139,58 @@ def calculate_accuracy(predictions, labels):
 faceDetector = FaceDetector()
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
 
-for video in train_data:
-    frames = train_data[video][0]
-    labels = train_data[video][1]
-    num_batches = frames.shape[0] // batch_size
-    data_batches = np.array_split(frames, num_batches)
-    label_batches = np.array_split(labels, num_batches)
-    for batch_num, (batch, labels) in enumerate(zip(data_batches, label_batches)):
-        batch = torch.from_numpy(batch).float()
-        targets = torch.from_numpy(labels).float()
 
-        predictions = faceDetector(batch)
-        loss = compute_loss(predictions, targets)
+for epoch in range(num_epochs):
 
-        loss.backward()
-        optimizer.step()
+    faceDetector.train()
+    batch_num = 0
+    for video in train_data:
+        frames = train_data[video][0]
+        labels = train_data[video][1]
+        num_batches = frames.shape[0] // batch_size
+        data_batches = np.array_split(frames, num_batches)
+        label_batches = np.array_split(labels, num_batches)
+        for batch, labels in zip(data_batches, label_batches):
+            batch_num += 1
 
-        accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
+            batch = torch.from_numpy(batch).float()
+            targets = torch.from_numpy(labels).float()
 
-        print(f"Batch {batch_num+1}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}")
+            predictions = faceDetector(batch)
+            loss = compute_loss(predictions, targets)
+
+            loss.backward()
+            optimizer.step()
+
+            accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
+
+            print(f"Batch {batch_num}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}")
+
+    faceDetector.eval()
+    validation_loss = 0
+    validation_accuracy_label = 0
+    validation_accuracy_other = 0
+    total = 0
+    with torch.no_grad():
+        for video in val_data:
+            frames = val_data[video][0]
+            labels = val_data[video][1]
+
+            frames = torch.from_numpy(frames).float()
+            targets = torch.from_numpy(labels).float()
+
+            predictions = faceDetector(frames)
+            loss = compute_loss(predictions, targets)
+            validation_loss += loss.item()
+
+            accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
+            validation_accuracy_label += accuracy_label
+            validation_accuracy_other += accuracy_other
+            total += 1
+
+        validation_loss /= total
+        validation_accuracy_label /= total
+        validation_accuracy_other /= total
+        print(f"Validation: Loss = {validation_loss}, Accuracy at label = {validation_accuracy_label}, Accuracy otherwise = {validation_accuracy_other}")
 
 
