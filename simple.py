@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import time
 
 data_path = "data/train_data"
-batch_size = 5
+batch_size = 1
 learning_rate = 1e-4
 label_loss_weight = 3e4
 num_epochs = 50
@@ -15,30 +15,21 @@ units = 8
 
 save_path = f"saved/model_4_{units}"
 
+if not os.path.exists("saved"):
+    os.makedirs("saved")
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(device)
 
 def display_image(temperature_image, target_image):
-    fig, axs = plt.subplots(1, 2)
-    axs[0].imshow(temperature_image, cmap='hot')
-    axs[0].axis('off')
-    axs[0].set_title('Temperature Image')
-
-    axs[1].imshow(target_image, cmap='binary')
-    axs[1].axis('off')
-    axs[1].set_title('Target Image')
+    plt.imshow(temperature_image, cmap='hot')
+    plt.axis('off')
+    plt.title('Temperature Image')
 
     target_coords = np.argwhere(target_image != 0)
     for coord in target_coords:
         row, col = coord
-        cross_coords = [
-            (col - 0.5, row),
-            (col + 0.5, row),
-            (col, row - 0.5),
-            (col, row + 0.5)
-        ]
-        cross = PathPatch(np.array([cross_coords]), closed=False, edgecolor='red', alpha=0.7, linewidth=2)
-        axs[1].add_patch(cross)
+        plt.plot(col, row, 'b+', markersize=10)
 
     plt.show()
 
@@ -66,6 +57,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 l = label['l']
                 if l == 1:
                     labeled_array[y, x] = 1
+
+            #display_image(array, labeled_array)
 
             if video_name in data:
                 data[video_name].append((frame_index, array, labeled_array))
@@ -152,6 +145,7 @@ def compute_loss(predictions, targets):
     loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='sum')
     return loss / batch_size
 
+
 def calculate_accuracy(predictions, labels):
     average_at_label = predictions[labels == 1].mean().item()
     average_other = predictions[labels == 0].mean().item()
@@ -174,6 +168,10 @@ for epoch in range(num_epochs):
     for data in train_data:
         frames = data[0]
         targets = data[1]
+
+        #image_array = frames[-1].numpy()
+        #target_array = targets[-1].numpy()
+        #display_image(image_array, target_array)
 
         predictions = faceDetector(frames)
         loss = compute_loss(predictions, targets)
