@@ -4,18 +4,18 @@ import json
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-
+import time
 
 data_path = "data/train_data"
 batch_size = 2
-learning_rate = 0.001
+learning_rate = 0.0001
 label_loss_weight = 100000
 num_epochs = 5
 
 save_path = f"saved/model"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
+print(device)
 
 def display_image(temperature_image, target_image):
     fig, axs = plt.subplots(1, 2)
@@ -155,6 +155,7 @@ for epoch in range(num_epochs):
         label_batches = np.array_split(labels, num_batches)
         for batch, labels in zip(data_batches, label_batches):
             batch_num += 1
+            start_time = time.time()
 
             batch = torch.from_numpy(batch).float().to(device)
             targets = torch.from_numpy(labels).float().to(device)
@@ -167,7 +168,8 @@ for epoch in range(num_epochs):
 
             accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
 
-            print(f"Batch {batch_num}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}")
+            batch_time = time.time() - start_time
+            print(f"Batch {batch_num}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, Time: {batch_time:.2f}s")
 
     faceDetector.eval()
     validation_loss = 0
