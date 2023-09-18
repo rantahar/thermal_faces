@@ -205,7 +205,6 @@ for epoch in range(num_epochs):
         "validation_accuracy_label": validation_accuracy_label,
         "validation_accuracy_other": validation_accuracy_other
     }
-    with open(f"{save_path}_{epoch}", "w") as f:
-        json.dump(save_dict, f)
+    torch.save(faceDetector.state_dict(), f"{save_path}_{epoch}")
 
 
