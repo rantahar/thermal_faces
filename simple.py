@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import time
 
 data_path = "data/train_data"
-batch_size = 2
+batch_size = 5
 learning_rate = 0.0001
 label_loss_weight = 100000
 num_epochs = 5
@@ -62,8 +62,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     for key in data.keys():
         data[key].sort(key=lambda x: x[0])
     
-    train_data = {}
-    val_data = {}
+    train_data = []
+    valid_data = []
 
     for video_name, frames in data.items():
         if len(frames) > 2:
@@ -72,28 +72,34 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             end_frame = int(np.ceil((0.5+0.5*validation_fraction)*num_frames))
 
             val_frames = frames[start_frame:end_frame]
-            val_data[video_name] = (
-                np.stack([frame[1] for frame in val_frames], axis=0),
-                np.stack([frame[2] for frame in val_frames], axis=0)
-            )
-
             train_frames = frames[:start_frame] + frames[end_frame:]
-            train_data[video_name] = (
-                np.stack([frame[1] for frame in train_frames], axis=0),
-                np.stack([frame[2] for frame in train_frames], axis=0)
-            )
 
-    return train_data, val_data
+            frames = np.stack([frame[1] for frame in val_frames], axis=0)
+            labels = np.stack([frame[2] for frame in val_frames], axis=0)
+            num_batches = np.max([1, frames.shape[0] // batch_size])
+            for i in range(num_batches+1):
+                start_idx = i * batch_size
+                end_idx = (i + 1) * batch_size
+                if start_idx < frames.shape[0]:
+                    data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
+                    target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
+                    valid_data.append((data,target))
+
+            frames = np.stack([frame[1] for frame in train_frames], axis=0)
+            labels = np.stack([frame[2] for frame in train_frames], axis=0)
+            num_batches = np.max([1, frames.shape[0] // batch_size])
+            for i in range(num_batches+1):
+                start_idx = i * batch_size
+                end_idx = (i + 1) * batch_size
+                if start_idx < frames.shape[0]:
+                    data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
+                    target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
+                    train_data.append((data,target))
+            
+    return train_data, valid_data
 
 
-train_data, val_data = load_npy_files(data_path)
-
-print()
-for video in train_data:
-    print(video, train_data[video][0].shape, train_data[video][1].shape)
-print()
-for video in val_data:
-    print(video, val_data[video][0].shape, val_data[video][1].shape)
+train_data, valid_data = load_npy_files(data_path)
 
 
 class FaceDetector(nn.Module):
@@ -143,33 +149,30 @@ faceDetector = FaceDetector().to(device)
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
 
 
+
+
+
 for epoch in range(num_epochs):
 
     faceDetector.train()
     batch_num = 0
-    for video in train_data:
-        frames = train_data[video][0]
-        labels = train_data[video][1]
-        num_batches = frames.shape[0] // batch_size
-        data_batches = np.array_split(frames, num_batches)
-        label_batches = np.array_split(labels, num_batches)
-        for batch, labels in zip(data_batches, label_batches):
-            batch_num += 1
-            start_time = time.time()
+    for data in train_data:
+        frames = data[0]
+        targets = data[1]
+            
+        start_time = time.time()
 
-            batch = torch.from_numpy(batch).float().to(device)
-            targets = torch.from_numpy(labels).float().to(device)
+        optimizer.zero_grad()
+        predictions = faceDetector(frames)
+        loss = compute_loss(predictions, targets)
 
-            predictions = faceDetector(batch)
-            loss = compute_loss(predictions, targets)
+        loss.backward()
+        optimizer.step()
 
-            loss.backward()
-            optimizer.step()
+        accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
 
-            accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
-
-            batch_time = time.time() - start_time
-            print(f"Batch {batch_num}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, Time: {batch_time:.2f}s")
+        batch_time = time.time() - start_time
+        print(f"Batch {batch_num}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, Time: {batch_time:.2f}s")
 
     faceDetector.eval()
     validation_loss = 0
@@ -177,12 +180,9 @@ for epoch in range(num_epochs):
     validation_accuracy_other = 0
     total = 0
     with torch.no_grad():
-        for video in val_data:
-            frames = val_data[video][0]
-            labels = val_data[video][1]
-
-            frames = torch.from_numpy(frames).float().to(device)
-            targets = torch.from_numpy(labels).float().to(device)
+        for data in valid_data:
+            frames = data[0]
+            targets = data[1]
 
             predictions = faceDetector(frames)
             loss = compute_loss(predictions, targets)
