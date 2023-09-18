@@ -8,12 +8,12 @@ import time
 
 data_path = "data/train_data"
 batch_size = 5
-learning_rate = 1e-3
-label_loss_weight = 1e5
+learning_rate = 1e-4
+label_loss_weight = 3e4
 num_epochs = 50
 units = 8
 
-save_path = f"saved/model_{units}"
+save_path = f"saved/model_4_{units}"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(device)
@@ -27,6 +27,18 @@ def display_image(temperature_image, target_image):
     axs[1].imshow(target_image, cmap='binary')
     axs[1].axis('off')
     axs[1].set_title('Target Image')
+
+    target_coords = np.argwhere(target_image != 0)
+    for coord in target_coords:
+        row, col = coord
+        cross_coords = [
+            (col - 0.5, row),
+            (col + 0.5, row),
+            (col, row - 0.5),
+            (col, row + 0.5)
+        ]
+        cross = PathPatch(np.array([cross_coords]), closed=False, edgecolor='red', alpha=0.7, linewidth=2)
+        axs[1].add_patch(cross)
 
     plt.show()
 
@@ -124,7 +136,7 @@ class FaceDetector(nn.Module):
         out = self.relu(out)
         out = self.conv4(out)
         out = self.sigmoid(out)
-
+        
         out = out.squeeze(1)
         return out
 
@@ -151,8 +163,6 @@ optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
 
 
 
-
-
 for epoch in range(num_epochs):
 
     faceDetector.train()
@@ -165,7 +175,6 @@ for epoch in range(num_epochs):
         frames = data[0]
         targets = data[1]
 
-        optimizer.zero_grad()
         predictions = faceDetector(frames)
         loss = compute_loss(predictions, targets)
 
@@ -203,25 +212,20 @@ for epoch in range(num_epochs):
         validation_loss /= total
         validation_accuracy_label /= total
         validation_accuracy_other /= total
-        print(f"Validation: Loss = {validation_loss}, Accuracy at label = {validation_accuracy_label}, Accuracy otherwise = {validation_accuracy_other}")
+        print(f"Validation: Loss = {validation_loss}, Accuracy at label = {validation_accuracy_label}, Accuracy otherwise = {validation_accuracy_other}", flush=True)
 
     model_state = faceDetector.state_dict()
-    save_dict = {
-        "model_state": model_state,
-        "validation_loss": validation_loss,
-        "validation_accuracy_label": validation_accuracy_label,
-        "validation_accuracy_other": validation_accuracy_other
-    }
     torch.save(
         {
-            'epoch': epoch,
             'model_state_dict': faceDetector.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            "validation_loss": validation_loss,
-            "validation_accuracy_label": validation_accuracy_label,
-            "validation_accuracy_other": validation_accuracy_other
         },
         f"{save_path}_{epoch}"
     )
-
-
+    with open(f"{save_path}_{epoch}.json", 'w') as f:
+        json.dump({
+            'epoch': epoch,
+            "validation_loss": validation_loss,
+            "validation_accuracy_label": validation_accuracy_label,
+            "validation_accuracy_other": validation_accuracy_other
+        }, f, indent=4)
