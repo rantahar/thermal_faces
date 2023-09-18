@@ -7,13 +7,14 @@ import matplotlib.pyplot as plt
 import time
 
 data_path = "data/train_data"
-batch_size = 1
+batch_size = 5
 learning_rate = 1e-4
-label_loss_weight = 3e4
-num_epochs = 50
-units = 8
+label_loss_weight = 2e3
+save_every = 500
+num_epochs = 5000
+units = 16
 
-save_path = f"saved/model_4_{units}"
+save_path = f"saved/model_5_{units}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
@@ -29,9 +30,46 @@ def display_image(temperature_image, target_image):
     target_coords = np.argwhere(target_image != 0)
     for coord in target_coords:
         row, col = coord
-        plt.plot(col, row, 'b+', markersize=10)
+        plt.plot(col, row, 'b+', markersize=1)
 
     plt.show()
+
+def display_image_target(temperature_image, target_image):
+    fig, axs = plt.subplots(1, 2)
+    axs[0].imshow(temperature_image, cmap='hot')
+    axs[0].axis('off')
+    axs[0].set_title('Temperature Image')
+
+    axs[1].imshow(target_image, cmap='binary')
+    axs[1].axis('off')
+    axs[1].set_title('Target Image')
+
+    plt.show()
+
+
+def mark_neighboring_pixels(original_temperature, temperature_image, target_image, x, y, threshold):
+    height, width = temperature_image.shape
+    
+    # Set the target pixel at the starting position to 1
+    target_image[y, x] = 1
+    
+    # Check neighboring pixels
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            # Skip if current position is the starting position
+            if i == 0 and j == 0:
+                continue
+            
+            # Calculate neighboring pixel coordinates
+            nx = x + i
+            ny = y + j
+            
+            # Check if neighboring pixel is within image bounds
+            if ny >= 0 and ny < height and nx >= 0 and nx < width:
+                # Check if temperature difference is below threshold
+                if abs(temperature_image[ny, nx] - original_temperature) < threshold and target_image[ny, nx] != 1:
+                    # Recursively mark neighboring pixels
+                    mark_neighboring_pixels(original_temperature, temperature_image, target_image, nx, ny, threshold)
 
 
 def load_npy_files(folder_path, validation_fraction=0.1):
@@ -56,9 +94,9 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 y = label['y']
                 l = label['l']
                 if l == 1:
-                    labeled_array[y, x] = 1
+                    mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1)
 
-            #display_image(array, labeled_array)
+            display_image_target(array, labeled_array)
 
             if video_name in data:
                 data[video_name].append((frame_index, array, labeled_array))
@@ -111,10 +149,15 @@ train_data, valid_data = load_npy_files(data_path)
 class FaceDetector(nn.Module):
     def __init__(self):
         super(FaceDetector, self).__init__()
-        self.conv1 = nn.Conv2d(1, units, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(units, 2*units, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(2*units, 4*units, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(4*units, 1, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(1, units, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(units, 2*units, kernel_size=3, stride=2, padding=1)
+
+        self.conv3 = nn.Conv2d(2*units, 2*units, kernel_size=3, stride=1, padding=1)
+        #self.conv4 = nn.Conv2d(4*units, 2*units, kernel_size=3, stride=1, padding=1)
+        #self.conv5 = nn.Conv2d(4*units, 2*units, kernel_size=3, stride=1, padding=1)
+
+        self.conv6 = nn.ConvTranspose2d(2*units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv7 = nn.ConvTranspose2d(units, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
     
@@ -127,7 +170,13 @@ class FaceDetector(nn.Module):
         out = self.relu(out)
         out = self.conv3(out)
         out = self.relu(out)
-        out = self.conv4(out)
+        #out = self.conv4(out)
+        #out = self.relu(out)
+        #out = self.conv5(out)
+        #out = self.relu(out)
+        out = self.conv6(out)
+        out = self.relu(out)
+        out = self.conv7(out)
         out = self.sigmoid(out)
         
         out = out.squeeze(1)
@@ -174,6 +223,7 @@ for epoch in range(num_epochs):
         #display_image(image_array, target_array)
 
         predictions = faceDetector(frames)
+        #print(predictions[0].cpu().detach().numpy())
         loss = compute_loss(predictions, targets)
 
         loss.backward()
@@ -212,18 +262,19 @@ for epoch in range(num_epochs):
         validation_accuracy_other /= total
         print(f"Validation: Loss = {validation_loss}, Accuracy at label = {validation_accuracy_label}, Accuracy otherwise = {validation_accuracy_other}", flush=True)
 
-    model_state = faceDetector.state_dict()
-    torch.save(
-        {
-            'model_state_dict': faceDetector.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-        },
-        f"{save_path}_{epoch}"
-    )
-    with open(f"{save_path}_{epoch}.json", 'w') as f:
-        json.dump({
-            'epoch': epoch,
-            "validation_loss": validation_loss,
-            "validation_accuracy_label": validation_accuracy_label,
-            "validation_accuracy_other": validation_accuracy_other
-        }, f, indent=4)
+    if epoch%save_every == 0:
+        model_state = faceDetector.state_dict()
+        torch.save(
+            {
+                'model_state_dict': faceDetector.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+            },
+            f"{save_path}_{epoch}"
+        )
+        with open(f"{save_path}_{epoch}.json", 'w') as f:
+            json.dump({
+                'epoch': epoch,
+                "validation_loss": validation_loss,
+                "validation_accuracy_label": validation_accuracy_label,
+                "validation_accuracy_other": validation_accuracy_other
+            }, f, indent=4)
