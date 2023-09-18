@@ -8,11 +8,12 @@ import time
 
 data_path = "data/train_data"
 batch_size = 5
-learning_rate = 0.0001
-label_loss_weight = 100000
-num_epochs = 5
+learning_rate = 1e-3
+label_loss_weight = 1e5
+num_epochs = 50
+units = 8
 
-save_path = f"saved/model"
+save_path = f"saved/model_{units}"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(device)
@@ -105,10 +106,10 @@ train_data, valid_data = load_npy_files(data_path)
 class FaceDetector(nn.Module):
     def __init__(self):
         super(FaceDetector, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(1, units, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(units, 2*units, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(2*units, 4*units, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(4*units, 1, kernel_size=3, stride=1, padding=1)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
     
@@ -135,7 +136,7 @@ def compute_loss(predictions, targets):
     predictions = predictions.view(-1)
     targets = targets.view(-1)
     weights = torch.ones_like(targets)
-    weights[targets == 1] = label_loss_weight
+    weights[targets == 0] /= label_loss_weight
     loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='sum')
     return loss / batch_size
 
@@ -156,11 +157,13 @@ for epoch in range(num_epochs):
 
     faceDetector.train()
     batch_num = 0
+    train_loss = 0
+    accuracy_label = 0
+    accuracy_other = 0
+    start_time = time.time()
     for data in train_data:
         frames = data[0]
         targets = data[1]
-            
-        start_time = time.time()
 
         optimizer.zero_grad()
         predictions = faceDetector(frames)
@@ -169,10 +172,14 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
+        acc_label, acc_other = calculate_accuracy(predictions, targets)
+        train_loss += loss.item()
+        accuracy_label += acc_label
+        accuracy_other += acc_other
+        batch_num += 1
 
-        batch_time = time.time() - start_time
-        print(f"Batch {batch_num}: Loss = {loss.item()}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, Time: {batch_time:.2f}s")
+    batch_time = time.time() - start_time
+    print(f"Epoch {epoch}: Loss = {loss/batch_num}, Accuracy at label = {accuracy_label/batch_num}, Accuracy otherwise = {accuracy_other/batch_num}, Time: {batch_time:.2f}s")
 
     faceDetector.eval()
     validation_loss = 0
@@ -205,6 +212,16 @@ for epoch in range(num_epochs):
         "validation_accuracy_label": validation_accuracy_label,
         "validation_accuracy_other": validation_accuracy_other
     }
-    torch.save(faceDetector.state_dict(), f"{save_path}_{epoch}")
+    torch.save(
+        {
+            'epoch': epoch,
+            'model_state_dict': faceDetector.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            "validation_loss": validation_loss,
+            "validation_accuracy_label": validation_accuracy_label,
+            "validation_accuracy_other": validation_accuracy_other
+        },
+        f"{save_path}_{epoch}"
+    )
 
 
