@@ -94,7 +94,7 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 y = label['y']
                 l = label['l']
                 if l == 1:
-                    mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1)
+                    mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.2)
 
             display_image_target(array, labeled_array)
 
