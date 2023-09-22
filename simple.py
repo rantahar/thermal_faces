@@ -9,14 +9,14 @@ import time
 from simple_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 5
+batch_size = 100
 learning_rate = 1e-4
 label_loss_weight = 1e5
-save_every = 1000
-num_epochs = 5001
-units = 4
+save_every = 100
+num_epochs = 1001
+units = 8
 
-save_path = f"saved/model_1_{units}"
+save_path = f"saved/model_5_{units}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
@@ -100,51 +100,68 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                     #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1)
 
             # display_image_target(array, labeled_array)
-
-            if video_name in data:
-                data[video_name].append((frame_index, array, labeled_array))
+            file_name = array.shape
+            if file_name in data:
+                data[file_name].append((frame_index, array, labeled_array))
             else:
-                data[video_name] = [(frame_index, array, labeled_array)]
+                data[file_name] = [(frame_index, array, labeled_array)]
     
     for key in data.keys():
         data[key].sort(key=lambda x: x[0])
     
-    train_data = []
-    valid_data = []
+    train_data_by_resolution = {}
+    valid_data_by_resolution = {}
 
     for video_name, frames in data.items():
         if len(frames) > 2:
             num_frames = len(frames)
+            resolution = frames[0][1].shape
             start_frame = int(np.floor((0.5-0.5*validation_fraction)*num_frames))
             end_frame = int(np.ceil((0.5+0.5*validation_fraction)*num_frames))
 
-            val_frames = frames[start_frame:end_frame]
+            valid_frames = frames[start_frame:end_frame]
             train_frames = frames[:start_frame] + frames[end_frame:]
 
-            frames = np.stack([frame[1] for frame in val_frames], axis=0)
-            labels = np.stack([frame[2] for frame in val_frames], axis=0)
-            num_batches = np.max([1, frames.shape[0] // batch_size])
-            for i in range(num_batches+1):
-                start_idx = i * batch_size
-                end_idx = (i + 1) * batch_size
-                if start_idx < frames.shape[0]:
-                    data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
-                    target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
-                    valid_data.append((data,target))
+            if resolution not in train_data_by_resolution:
+                train_data_by_resolution[resolution] = train_frames
+            else:
+                train_data_by_resolution[resolution] += train_frames
 
-            frames = np.stack([frame[1] for frame in train_frames], axis=0)
-            labels = np.stack([frame[2] for frame in train_frames], axis=0)
-            num_batches = np.max([1, frames.shape[0] // batch_size])
-            for i in range(num_batches+1):
-                start_idx = i * batch_size
-                end_idx = (i + 1) * batch_size
-                if start_idx < frames.shape[0]:
-                    data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
-                    target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
-                    train_data.append((data,target))
+            if resolution not in valid_data_by_resolution:
+                valid_data_by_resolution[resolution] = valid_frames
+            else:
+                valid_data_by_resolution[resolution] += valid_frames
+
+    train_data = []
+    valid_data = []
+
+    for resolution in train_data_by_resolution:
+        data = train_data_by_resolution[resolution]
+        frames = np.stack([frame[1] for frame in data], axis=0)
+        labels = np.stack([frame[2] for frame in data], axis=0)
+        num_batches = np.max([1, frames.shape[0] // batch_size])
+        for i in range(num_batches+1):
+            start_idx = i * batch_size
+            end_idx = (i + 1) * batch_size
+            if start_idx < frames.shape[0]:
+                data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
+                target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
+                train_data.append((data,target))
+        
+    for resolution in valid_data_by_resolution:
+        data = valid_data_by_resolution[resolution]
+        frames = np.stack([frame[1] for frame in data], axis=0)
+        labels = np.stack([frame[2] for frame in data], axis=0)
+        num_batches = np.max([1, frames.shape[0] // batch_size])
+        for i in range(num_batches+1):
+            start_idx = i * batch_size
+            end_idx = (i + 1) * batch_size
+            if start_idx < frames.shape[0]:
+                data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
+                target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
+                valid_data.append((data,target))
             
     return train_data, valid_data
-
 
 train_data, valid_data = load_npy_files(data_path)
 
