@@ -6,15 +6,17 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import time
 
+from simple_model import FaceDetector
+
 data_path = "data/train_data"
 batch_size = 5
 learning_rate = 1e-4
-label_loss_weight = 2e3
-save_every = 500
-num_epochs = 5000
-units = 16
+label_loss_weight = 1e5
+save_every = 1000
+num_epochs = 5001
+units = 4
 
-save_path = f"saved/model_5_{units}"
+save_path = f"saved/model_1_{units}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
@@ -94,9 +96,10 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 y = label['y']
                 l = label['l']
                 if l == 1:
-                    mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1)
+                    labeled_array[y, x] = 1
+                    #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1)
 
-            display_image_target(array, labeled_array)
+            # display_image_target(array, labeled_array)
 
             if video_name in data:
                 data[video_name].append((frame_index, array, labeled_array))
@@ -146,53 +149,17 @@ def load_npy_files(folder_path, validation_fraction=0.1):
 train_data, valid_data = load_npy_files(data_path)
 
 
-class FaceDetector(nn.Module):
-    def __init__(self):
-        super(FaceDetector, self).__init__()
-        self.conv1 = nn.Conv2d(1, units, kernel_size=3, stride=2, padding=1)
-        self.conv2 = nn.Conv2d(units, 2*units, kernel_size=3, stride=2, padding=1)
-
-        self.conv3 = nn.Conv2d(2*units, 2*units, kernel_size=3, stride=1, padding=1)
-        #self.conv4 = nn.Conv2d(4*units, 2*units, kernel_size=3, stride=1, padding=1)
-        #self.conv5 = nn.Conv2d(4*units, 2*units, kernel_size=3, stride=1, padding=1)
-
-        self.conv6 = nn.ConvTranspose2d(2*units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.conv7 = nn.ConvTranspose2d(units, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-    
-    def forward(self, temperatures):
-        temperatures = temperatures.unsqueeze(1)
-
-        out = self.conv1(temperatures)
-        out = self.relu(out)
-        out = self.conv2(out)
-        out = self.relu(out)
-        out = self.conv3(out)
-        out = self.relu(out)
-        #out = self.conv4(out)
-        #out = self.relu(out)
-        #out = self.conv5(out)
-        #out = self.relu(out)
-        out = self.conv6(out)
-        out = self.relu(out)
-        out = self.conv7(out)
-        out = self.sigmoid(out)
-        
-        out = out.squeeze(1)
-        return out
-
 
 def compute_loss(predictions, targets):
     #predictions = torch.sigmoid(predictions)
-    batch_size = predictions.size(0)
+    batch_size = targets.size(0)
 
     predictions = predictions.view(-1)
     targets = targets.view(-1)
     weights = torch.ones_like(targets)
     weights[targets == 0] /= label_loss_weight
     loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='sum')
-    return loss / batch_size
+    return loss/batch_size
 
 
 def calculate_accuracy(predictions, labels):
@@ -201,7 +168,7 @@ def calculate_accuracy(predictions, labels):
     return average_at_label, 1-average_other
 
 
-faceDetector = FaceDetector().to(device)
+faceDetector = FaceDetector(units).to(device)
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
 
 
@@ -220,23 +187,25 @@ for epoch in range(num_epochs):
 
         #image_array = frames[-1].numpy()
         #target_array = targets[-1].numpy()
-        #display_image(image_array, target_array)
+        #display_image_target(image_array, target_array)
 
         predictions = faceDetector(frames)
-        #print(predictions[0].cpu().detach().numpy())
         loss = compute_loss(predictions, targets)
+        train_loss += loss.item()
 
         loss.backward()
         optimizer.step()
 
         acc_label, acc_other = calculate_accuracy(predictions, targets)
-        train_loss += loss.item()
         accuracy_label += acc_label
         accuracy_other += acc_other
         batch_num += 1
 
     batch_time = time.time() - start_time
-    print(f"Epoch {epoch}: Loss = {loss/batch_num}, Accuracy at label = {accuracy_label/batch_num}, Accuracy otherwise = {accuracy_other/batch_num}, Time: {batch_time:.2f}s")
+    train_loss /= batch_num
+    accuracy_label /= batch_num
+    accuracy_other /= batch_num
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, Time: {batch_time:.2f}s")
 
     faceDetector.eval()
     validation_loss = 0
@@ -274,6 +243,9 @@ for epoch in range(num_epochs):
         with open(f"{save_path}_{epoch}.json", 'w') as f:
             json.dump({
                 'epoch': epoch,
+                "train_loss": train_loss,
+                "train_accuracy_label": accuracy_label,
+                "train_accuracy_other": accuracy_other,
                 "validation_loss": validation_loss,
                 "validation_accuracy_label": validation_accuracy_label,
                 "validation_accuracy_other": validation_accuracy_other
