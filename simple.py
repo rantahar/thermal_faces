@@ -9,12 +9,12 @@ import time
 from simple_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 100
-learning_rate = 1e-4
+batch_size = 5
+learning_rate = 1e-5
 label_loss_weight = 1e5
 save_every = 100
 num_epochs = 1001
-units = 8
+units = 16
 
 save_path = f"saved/model_5_{units}"
 
@@ -103,8 +103,12 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             file_name = array.shape
             if file_name in data:
                 data[file_name].append((frame_index, array, labeled_array))
+                data[file_name].append((frame_index+0.5, np.flip(array, axis=0), np.flip(labeled_array, axis=0)))
             else:
-                data[file_name] = [(frame_index, array, labeled_array)]
+                data[file_name] = [
+                    (frame_index, array, labeled_array),
+                    (frame_index+0.5, np.flip(array, axis=0), np.flip(labeled_array, axis=0)),
+                ]
     
     for key in data.keys():
         data[key].sort(key=lambda x: x[0])
@@ -153,7 +157,7 @@ def load_npy_files(folder_path, validation_fraction=0.1):
         frames = np.stack([frame[1] for frame in data], axis=0)
         labels = np.stack([frame[2] for frame in data], axis=0)
         num_batches = np.max([1, frames.shape[0] // batch_size])
-        for i in range(num_batches+1):
+        for i in range(num_batches):
             start_idx = i * batch_size
             end_idx = (i + 1) * batch_size
             if start_idx < frames.shape[0]:
@@ -164,7 +168,7 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     return train_data, valid_data
 
 train_data, valid_data = load_npy_files(data_path)
-
+print(len(train_data), len(valid_data))
 
 
 def compute_loss(predictions, targets):
@@ -174,15 +178,15 @@ def compute_loss(predictions, targets):
     predictions = predictions.view(-1)
     targets = targets.view(-1)
     weights = torch.ones_like(targets)
-    weights[targets == 0] /= label_loss_weight
-    loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='sum')
-    return loss/batch_size
+    weights[targets == 1] *= label_loss_weight
+    loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='mean')
+    return loss
 
 
 def calculate_accuracy(predictions, labels):
     average_at_label = predictions[labels == 1].mean().item()
-    average_other = predictions[labels == 0].mean().item()
-    return average_at_label, 1-average_other
+    average_other = 1.-predictions[labels == 0].mean().item()
+    return average_at_label, average_other
 
 
 faceDetector = FaceDetector(units).to(device)

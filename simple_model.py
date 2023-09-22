@@ -12,7 +12,7 @@ class FaceDetector(nn.Module):
         self.conv_down_4 = nn.Conv2d(units, 2*units, kernel_size=3, stride=2, padding=1)
         self.conv_down_5 = nn.Conv2d(2*units, 2*units, kernel_size=3, stride=2, padding=1)
 
-        self.conv_up_5 = nn.ConvTranspose2d(2*units, 2*units, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv_up_5 = nn.ConvTranspose2d(2*units, 2*units, kernel_size=5, stride=2, padding=2, output_padding=1)
         self.conv_up_4 = nn.ConvTranspose2d(2*units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.conv_up_3 = nn.ConvTranspose2d(2*units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.conv_up_2 = nn.ConvTranspose2d(units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
