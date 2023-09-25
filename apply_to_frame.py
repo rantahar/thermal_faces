@@ -1,8 +1,7 @@
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
-from simple_model import FaceDetector
 import cv2
+from simple_model import FaceDetector
 
 units = 16
 input_image = "data/train_data/Pilot2_MagicFlute_Part1_10500.npy"
