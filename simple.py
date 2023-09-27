@@ -5,19 +5,20 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import time
+from scipy import ndimage
 
 from unet_model import FaceDetector
 
 data_path = "data/train_data"
 batch_size = 5
 learning_rate = 1e-4
-label_loss_weight = 1e3
+label_loss_weight = 1
 label_weight_decay = 1 #0.996
-min_label_weight = 10
+min_label_weight = 1
 save_every = 500
 num_epochs = 10001
 label_fuzzyness = 0
-units = 8
+units = 32
 
 print(units)
 
@@ -107,8 +108,11 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 y = label['y']
                 l = label['l']
                 if l == 1:
-                    labeled_array[y, x] = 1
-                    #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1, 4)
+                    labeled_array[y, x] = 1.0
+
+            if labeled_array.max() > 0.01:
+                labeled_array = ndimage.gaussian_filter(labeled_array, sigma=3)
+                labeled_array /= labeled_array.max()
             labeled_array = labeled_array*(1-2*label_fuzzyness) + label_fuzzyness
             
             # display_image_target(array, labeled_array)
@@ -206,8 +210,9 @@ def compute_loss(predictions, labels):
 
 def calculate_accuracy(predictions, labels):
     predictions = nn.functional.sigmoid(predictions)
-    average_at_label = predictions[labels > 0.5].mean().item()
-    average = 1.-(labels-predictions).abs().mean().item()
+    accuracy = 1.-(labels-predictions).abs()
+    average_at_label = accuracy[labels > 0.8].mean().item()
+    average = accuracy.mean().item()
     return average, average_at_label
 
 
