@@ -6,18 +6,20 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import time
 
-from simple_model import FaceDetector
+from unet_model import FaceDetector
 
 data_path = "data/train_data"
 batch_size = 5
-learning_rate = 1e-3
+learning_rate = 1e-4
 label_loss_weight = 1e3
-label_weight_decay = 0.996
+label_weight_decay = 1 #0.996
 min_label_weight = 10
 save_every = 500
 num_epochs = 10001
 label_fuzzyness = 0
 units = 8
+
+print(units)
 
 save_path = f"saved/model_5_{units}"
 
@@ -197,8 +199,8 @@ def compute_loss(predictions, labels):
     labels = labels.view(-1)
     weights = torch.ones_like(labels)
     weights[labels > 0.5] = label_loss_weight
-    loss = loss_function(predictions, labels)
-    loss = torch.sum(loss[labels > 0.5]) * label_loss_weight + torch.sum(loss[labels < 0.5]) 
+    loss = loss_function(predictions, labels) * weights
+    loss = torch.sum(loss) / torch.sum(weights)
     return loss
 
 
