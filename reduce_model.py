@@ -10,7 +10,7 @@ class FaceDetectionModel(nn.Module):
         self.image_height = image_height
         
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1)
-        self.batch_norm1 = nn.BatchNorm2d(units)
+        self.batch_norm1 = nn.BatchNorm2d(16)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1)
         self.fc1 = nn.Linear(32 * (image_width // 4) * (image_height // 4), 256)
         self.fc2 = nn.Linear(256, 1)
