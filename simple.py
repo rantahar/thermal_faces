@@ -13,10 +13,11 @@ batch_size = 5
 learning_rate = 1e-3
 label_loss_weight = 1e3
 label_weight_decay = 0.996
-min_label_weight = 1
+min_label_weight = 10
 save_every = 500
 num_epochs = 10001
-units = 32
+label_fuzzyness = 0
+units = 8
 
 save_path = f"saved/model_5_{units}"
 
@@ -105,8 +106,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 l = label['l']
                 if l == 1:
                     labeled_array[y, x] = 1
-                    #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1, 5)
-            labeled_array = labeled_array*0.96 + 0.02
+                    #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1, 4)
+            labeled_array = labeled_array*(1-2*label_fuzzyness) + label_fuzzyness
             
             # display_image_target(array, labeled_array)
             file_name = array.shape
@@ -178,24 +179,34 @@ def load_npy_files(folder_path, validation_fraction=0.1):
 
 train_data, valid_data = load_npy_files(data_path)
 print(len(train_data), len(valid_data))
+targets = 0
+pixels = 0
+for batch in train_data:
+    pixels += batch[1].shape[0]*batch[1].shape[1]*batch[1].shape[2]
+    targets += torch.sum(batch[1]).item()
+print(pixels, targets, pixels / targets)
 
 
-def compute_loss(predictions, targets):
-    #predictions = torch.sigmoid(predictions)
-    batch_size = targets.size(0)
+loss_function = nn.BCEWithLogitsLoss(reduction='none')
+
+def compute_loss(predictions, labels):
+    #predictions = nn.functional.sigmoid(predictions)
+    batch_size = labels.size(0)
 
     predictions = predictions.view(-1)
-    targets = targets.view(-1)
-    weights = torch.ones_like(targets)
-    weights[targets < 0.5] = 1./label_loss_weight
-    loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='mean')
+    labels = labels.view(-1)
+    weights = torch.ones_like(labels)
+    weights[labels > 0.5] = label_loss_weight
+    loss = loss_function(predictions, labels)
+    loss = torch.sum(loss[labels > 0.5]) * label_loss_weight + torch.sum(loss[labels < 0.5]) 
     return loss
 
 
 def calculate_accuracy(predictions, labels):
+    predictions = nn.functional.sigmoid(predictions)
     average_at_label = predictions[labels > 0.5].mean().item()
-    average_other = 1.-predictions[labels < 0.5].mean().item()
-    return average_at_label, average_other
+    average = 1.-(labels-predictions).abs().mean().item()
+    return average, average_at_label
 
 
 faceDetector = FaceDetector(units).to(device)
@@ -208,16 +219,12 @@ for epoch in range(num_epochs):
     faceDetector.train()
     batch_num = 0
     train_loss = 0
+    accuracy = 0
     accuracy_label = 0
-    accuracy_other = 0
     start_time = time.time()
     for data in train_data:
         frames = data[0]
         targets = data[1]
-
-        #image_array = frames[-1].numpy()
-        #target_array = targets[-1].numpy()
-        #display_image_target(image_array, target_array)
 
         predictions = faceDetector(frames)
         loss = compute_loss(predictions, targets)
@@ -226,21 +233,20 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        acc_label, acc_other = calculate_accuracy(predictions, targets)
+        acc, acc_label = calculate_accuracy(predictions, targets)
         accuracy_label += acc_label
-        accuracy_other += acc_other
+        accuracy += acc
         batch_num += 1
 
     batch_time = time.time() - start_time
     train_loss /= batch_num
     accuracy_label /= batch_num
-    accuracy_other /= batch_num
-    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, label weight {label_loss_weight:.0f}, Time: {batch_time:.2f}s")
+    accuracy /= batch_num
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {accuracy}, Accuracy at label = {accuracy_label}, label weight {label_loss_weight:.0f}, Time: {batch_time:.2f}s")
 
-    faceDetector.eval()
     validation_loss = 0
+    validation_accuracy = 0
     validation_accuracy_label = 0
-    validation_accuracy_other = 0
     total = 0
     with torch.no_grad():
         for data in valid_data:
@@ -251,15 +257,15 @@ for epoch in range(num_epochs):
             loss = compute_loss(predictions, targets)
             validation_loss += loss.item()
 
-            accuracy_label, accuracy_other = calculate_accuracy(predictions, targets)
+            accuracy, accuracy_label = calculate_accuracy(predictions, targets)
             validation_accuracy_label += accuracy_label
-            validation_accuracy_other += accuracy_other
+            validation_accuracy += accuracy
             total += 1
 
         validation_loss /= total
         validation_accuracy_label /= total
-        validation_accuracy_other /= total
-        print(f"Validation: Loss = {validation_loss}, Accuracy at label = {validation_accuracy_label}, Accuracy otherwise = {validation_accuracy_other}", flush=True)
+        validation_accuracy /= total
+        print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}, Accuracy at label = {validation_accuracy_label}", flush=True)
 
     if label_loss_weight > min_label_weight:
         label_loss_weight *= label_weight_decay
@@ -279,9 +285,9 @@ for epoch in range(num_epochs):
             json.dump({
                 'epoch': epoch,
                 "train_loss": train_loss,
+                "train_accuracy": accuracy,
                 "train_accuracy_label": accuracy_label,
-                "train_accuracy_other": accuracy_other,
                 "validation_loss": validation_loss,
-                "validation_accuracy_label": validation_accuracy_label,
-                "validation_accuracy_other": validation_accuracy_other
+                "validation_accuracy": validation_accuracy,
+                "validation_accuracy_label": validation_accuracy_label
             }, f, indent=4)

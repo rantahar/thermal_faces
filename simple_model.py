@@ -46,7 +46,9 @@ class FaceDetector(nn.Module):
         out = self.relu(out)
         out = torch.cat([out, down_1], dim=1)
         out = self.conv_up_1(out)
-        out = self.sigmoid(out)
+
+        if not self.training:
+            out = self.sigmoid(out)
         
         out = out.squeeze(1)
         return out
