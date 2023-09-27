@@ -10,11 +10,13 @@ from simple_model import FaceDetector
 
 data_path = "data/train_data"
 batch_size = 5
-learning_rate = 1e-5
-label_loss_weight = 1e5
-save_every = 100
-num_epochs = 1001
-units = 16
+learning_rate = 1e-3
+label_loss_weight = 1e3
+label_weight_decay = 0.996
+min_label_weight = 1
+save_every = 500
+num_epochs = 10001
+units = 32
 
 save_path = f"saved/model_5_{units}"
 
@@ -49,7 +51,10 @@ def display_image_target(temperature_image, target_image):
     plt.show()
 
 
-def mark_neighboring_pixels(original_temperature, temperature_image, target_image, x, y, threshold):
+def mark_neighboring_pixels(original_temperature, temperature_image, target_image, x, y, threshold, max_dist):
+    if max_dist < 1:
+        return
+    
     height, width = temperature_image.shape
     
     # Set the target pixel at the starting position to 1
@@ -58,20 +63,23 @@ def mark_neighboring_pixels(original_temperature, temperature_image, target_imag
     # Check neighboring pixels
     for i in range(-1, 2):
         for j in range(-1, 2):
-            # Skip if current position is the starting position
             if i == 0 and j == 0:
                 continue
             
             # Calculate neighboring pixel coordinates
             nx = x + i
             ny = y + j
-            
+
+            # Skip if already set
+            if target_image[ny, nx] == 1:
+                continue
+
             # Check if neighboring pixel is within image bounds
             if ny >= 0 and ny < height and nx >= 0 and nx < width:
                 # Check if temperature difference is below threshold
-                if abs(temperature_image[ny, nx] - original_temperature) < threshold and target_image[ny, nx] != 1:
+                if abs(temperature_image[ny, nx] - original_temperature) < threshold:
                     # Recursively mark neighboring pixels
-                    mark_neighboring_pixels(original_temperature, temperature_image, target_image, nx, ny, threshold)
+                    mark_neighboring_pixels(original_temperature, temperature_image, target_image, nx, ny, threshold, max_dist-1)
 
 
 def load_npy_files(folder_path, validation_fraction=0.1):
@@ -97,8 +105,9 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                 l = label['l']
                 if l == 1:
                     labeled_array[y, x] = 1
-                    #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1)
-
+                    #mark_neighboring_pixels(array[y, x], array, labeled_array, x, y, 0.1, 5)
+            labeled_array = labeled_array*0.96 + 0.02
+            
             # display_image_target(array, labeled_array)
             file_name = array.shape
             if file_name in data:
@@ -178,14 +187,14 @@ def compute_loss(predictions, targets):
     predictions = predictions.view(-1)
     targets = targets.view(-1)
     weights = torch.ones_like(targets)
-    weights[targets == 1] *= label_loss_weight
+    weights[targets < 0.5] = 1./label_loss_weight
     loss = nn.functional.binary_cross_entropy(predictions, targets, weight=weights, reduction='mean')
     return loss
 
 
 def calculate_accuracy(predictions, labels):
-    average_at_label = predictions[labels == 1].mean().item()
-    average_other = 1.-predictions[labels == 0].mean().item()
+    average_at_label = predictions[labels > 0.5].mean().item()
+    average_other = 1.-predictions[labels < 0.5].mean().item()
     return average_at_label, average_other
 
 
@@ -226,7 +235,7 @@ for epoch in range(num_epochs):
     train_loss /= batch_num
     accuracy_label /= batch_num
     accuracy_other /= batch_num
-    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, Time: {batch_time:.2f}s")
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy at label = {accuracy_label}, Accuracy otherwise = {accuracy_other}, label weight {label_loss_weight:.0f}, Time: {batch_time:.2f}s")
 
     faceDetector.eval()
     validation_loss = 0
@@ -251,6 +260,11 @@ for epoch in range(num_epochs):
         validation_accuracy_label /= total
         validation_accuracy_other /= total
         print(f"Validation: Loss = {validation_loss}, Accuracy at label = {validation_accuracy_label}, Accuracy otherwise = {validation_accuracy_other}", flush=True)
+
+    if label_loss_weight > min_label_weight:
+        label_loss_weight *= label_weight_decay
+    else:
+        label_loss_weight = min_label_weight
 
     if epoch%save_every == 0:
         model_state = faceDetector.state_dict()
