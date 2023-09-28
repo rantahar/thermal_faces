@@ -18,7 +18,8 @@ min_label_weight = 1
 save_every = 500
 num_epochs = 10001
 label_fuzzyness = 0
-units = 32
+label_width = 5
+units = 64
 
 print(units)
 
@@ -111,7 +112,7 @@ def load_npy_files(folder_path, validation_fraction=0.1):
                     labeled_array[y, x] = 1.0
 
             if labeled_array.max() > 0.01:
-                labeled_array = ndimage.gaussian_filter(labeled_array, sigma=3)
+                labeled_array = ndimage.gaussian_filter(labeled_array, sigma=label_width)
                 labeled_array /= labeled_array.max()
             labeled_array = labeled_array*(1-2*label_fuzzyness) + label_fuzzyness
             
