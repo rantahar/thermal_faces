@@ -16,7 +16,10 @@ class FaceDetector(nn.Module):
         self.conv_up_4 = nn.ConvTranspose2d(8*units, 4*units, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.conv_up_3 = nn.ConvTranspose2d(8*units, 2*units, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.conv_up_2 = nn.ConvTranspose2d(2*units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.conv_up_1 = nn.ConvTranspose2d(2*units, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv_up_1 = nn.ConvTranspose2d(2*units, units, kernel_size=3, stride=2, padding=1, output_padding=1)
+        
+        self.conv_final = nn.Conv2d(units, 1, kernel_size=3, padding=1)
+
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
     
@@ -46,6 +49,9 @@ class FaceDetector(nn.Module):
         out = self.relu(out)
         out = torch.cat([out, down_1], dim=1)
         out = self.conv_up_1(out)
+        out = self.relu(out)
+
+        out = self.conv_final(out)
 
         if not self.training:
             out = self.sigmoid(out)
