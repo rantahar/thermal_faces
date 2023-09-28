@@ -1,11 +1,17 @@
+import sys
 import torch
 import numpy as np
 import cv2
-from simple_model import FaceDetector
+from unet_model import FaceDetector
 
-units = 16
-input_image = "data/train_data/Pilot2_MagicFlute_Part1_10500.npy"
-path_to_model = f"saved/model_5_{units}_900"
+units = 32
+input_image = "data/train_data/Pilot2_MagicFlute_Part1_8500.npy"
+if len(sys.argv) > 1:
+    units = int(sys.argv[1])
+    path_to_model = sys.argv[2]
+else:
+    units = 32
+    path_to_model = f"saved/model_5_{units}_1000"
 
 
 def visualize_predictions(temperatures, output, threshold):
@@ -21,8 +27,10 @@ def visualize_predictions(temperatures, output, threshold):
     image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
     # Find the regions where the model prediction is above the threshold
-    above_threshold_indices = np.where(output > threshold)
-    image[above_threshold_indices] = [255, 0, 0]
+    out_max = output.max()
+    #print(np.where(output_np>(threshold*output_np.max())))
+    above_threshold_indices = np.where(output > (out_max*threshold))
+    image[above_threshold_indices] = [255,0,0]
 
     # Display the output frame
     cv2.imshow("Visualization", image)
@@ -53,5 +61,7 @@ with torch.no_grad():
 # Convert the output tensor to a numpy array
 output_np = output.numpy()
 
+print(output_np.max(), output_np.min(), np.where(output_np==output_np.max()))
+
 # Display the input image and the predicted output
-visualize_predictions(image, output_np, 0.99999)
+visualize_predictions(image, output_np, 0.3)
