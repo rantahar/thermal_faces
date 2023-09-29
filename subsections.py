@@ -9,13 +9,13 @@ from subsection_utils import extract_subregions, display_image
 from reduce_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 1000
-learning_rate = 1e-3
+batch_size = 100
+learning_rate = 1e-4
 region_size = 64
 region_step_fraction = 0.5
 save_every = 500
 num_epochs = 10001
-units = 16
+units = 8
 
 print("units:", units)
 
@@ -39,7 +39,8 @@ def batch_data(data):
 
         if len(arrays) == batch_size or i == (len(data)-1):
             arrays_tensor = torch.tensor(np.array(arrays), dtype=torch.float32).to(device)
-            labels_tensor = torch.tensor(labels, dtype=torch.float32).to(device)
+            label = 0.02+0.96*np.array(labels)
+            labels_tensor = torch.tensor(label, dtype=torch.float32).to(device)
 
             batches.append((arrays_tensor, labels_tensor))
 
@@ -136,6 +137,7 @@ for batch in train_data:
 
 print("Positive label fraction:", regions / labels)
 
+
 loss_function = nn.BCEWithLogitsLoss()
 
 def compute_loss(predictions, labels):
@@ -161,9 +163,9 @@ for epoch in range(num_epochs):
     faceDetector.train()
     batch_num = 0
     train_loss = 0
-    accuracy = 0
+    train_accuracy = 0
     start_time = time.time()
-    for data in train_data:
+    for i, data in enumerate(train_data):
         frames = data[0]
         targets = data[1]
 
@@ -174,13 +176,20 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        accuracy += calculate_accuracy(predictions, targets)
+        #std = predictions.detach().numpy().std()
+        #print(std)
+
+        accuracy = calculate_accuracy(predictions, targets)
+        train_accuracy += accuracy
+        #print(i, loss.item(), accuracy)
+        #print(predictions.detach().numpy())
+        #print(targets.detach().numpy())
         batch_num += 1
 
     batch_time = time.time() - start_time
     train_loss /= batch_num
-    accuracy /= batch_num
-    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {accuracy}, Time: {batch_time:.2f}s")
+    train_accuracy /= batch_num
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {train_accuracy}, Time: {batch_time:.2f}s")
 
     validation_loss = 0
     validation_accuracy = 0

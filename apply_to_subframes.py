@@ -39,14 +39,15 @@ model.eval()
 image = np.load(input_image).astype(np.float32)
 regions = extract_subregions(image, None, section_size, section_size, step_fraction)
 
-for array, _, x, y in regions:
-    array = torch.tensor(array)
-    display_image(array)
+arrays = [r[0] for r in regions]
+with torch.no_grad():
+    tensor = torch.tensor(arrays)
+    predictions = model(tensor).squeeze(0).numpy()
 
-    # Run the model on the image tensor
-    with torch.no_grad():
-        image_tensor = torch.tensor(array).unsqueeze(0)
-        output = model(image_tensor).squeeze(0).numpy()
-    
+for i in range(len(regions)):
+    array, _, x, y = regions[i]
+    output = predictions[i]
+    #display_image(array)
+        
     print(x, y, output)
 

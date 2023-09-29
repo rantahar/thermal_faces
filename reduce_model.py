@@ -13,12 +13,13 @@ class FaceDetector(nn.Module):
         self.flat_size = 2 * units * (image_width // 4) * (image_height // 4)
         
         self.conv1 = nn.Conv2d(1, units, kernel_size=3, stride=2, padding=1)
-        self.batch_norm1 = nn.BatchNorm2d(units)
         self.conv2 = nn.Conv2d(units, units, kernel_size=3, stride=1, padding=1)
         self.conv3 = nn.Conv2d(units, 2*units, kernel_size=3, stride=2, padding=1)
         self.conv4 = nn.Conv2d(2*units, 2*units, kernel_size=3, stride=1, padding=1)
         self.fc1 = nn.Linear(self.flat_size, 16*units)
         self.fc2 = nn.Linear(16*units, 1)
+
+        self.batch_norm1 = nn.BatchNorm2d(units)
 
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
@@ -36,7 +37,7 @@ class FaceDetector(nn.Module):
         out = self.conv4(out)
         out = self.relu(out)
         
-        out = out.view(-1, self.flat_size)
+        out = torch.flatten(out, 1)
         out = self.fc1(out)
         out = self.relu(out)
         out = self.fc2(out)
