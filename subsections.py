@@ -11,7 +11,7 @@ from reduce_model import FaceDetector
 data_path = "data/train_data"
 batch_size = 1000
 learning_rate = 1e-3
-region_size = 32
+region_size = 64
 region_step_fraction = 0.5
 save_every = 500
 num_epochs = 10001
@@ -33,7 +33,7 @@ def batch_data(data):
     labels = []
     batches = []
 
-    for i, (array, label) in enumerate(data):
+    for i, (array, label, _ , _) in enumerate(data):
         arrays.append(array)
         labels.append(label)
 
@@ -135,7 +135,6 @@ for batch in train_data:
     labels += torch.sum(batch[1]).item()
 
 print("Positive label fraction:", regions / labels)
-
 
 loss_function = nn.BCEWithLogitsLoss()
 
