@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import numpy as np
 
 
 def display_image(temperature_image):
@@ -28,3 +30,19 @@ def extract_subregions(array, labels=None, height=32, width=32, step_fraction=0.
             subregions.append((subregion, contains_label, x, y))
 
     return subregions
+
+
+def plot_boxes_on_image(image, boxes):
+    # Create figure and axes
+    fig, ax = plt.subplots(1)
+    
+    # Display the image
+    ax.imshow(image, cmap='gray')
+    
+    # Add bounding boxes to the image
+    for box in boxes:
+        rect = patches.Rectangle((box[0], box[1]), box[2], box[3], linewidth=1, edgecolor='r', facecolor='none')
+        ax.add_patch(rect)
+    
+    # Show plot
+    plt.show()
