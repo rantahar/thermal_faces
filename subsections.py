@@ -14,9 +14,9 @@ learning_rate = 1e-4
 region_size = 64
 region_step_fraction = 0.5
 label_weight = 1
-save_every = 500
+save_every = 100
 num_epochs = 10001
-units = 8
+units = 16
 
 print("units:", units)
 
