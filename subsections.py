@@ -5,86 +5,72 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import time
-from scipy import ndimage
 
-from unet_model import FaceDetector
+from reduce_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 5
+batch_size = 100
 learning_rate = 1e-4
-label_loss_weight = 1
-label_weight_decay = 1 #0.996
-min_label_weight = 1
+region_size = 60
 save_every = 500
 num_epochs = 10001
-label_fuzzyness = 0
-label_width = 5
-units = 64
+units = 8
 
-print(units)
+print("units:", units)
 
-save_path = f"saved/model_5_{units}"
+save_path = f"saved/reduction_model_5_{units}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(device)
+print("device:", device)
 
-def display_image(temperature_image, target_image):
+def display_image(temperature_image):
     plt.imshow(temperature_image, cmap='hot')
     plt.axis('off')
     plt.title('Temperature Image')
-
-    target_coords = np.argwhere(target_image != 0)
-    for coord in target_coords:
-        row, col = coord
-        plt.plot(col, row, 'b+', markersize=1)
-
-    plt.show()
-
-def display_image_target(temperature_image, target_image):
-    fig, axs = plt.subplots(1, 2)
-    axs[0].imshow(temperature_image, cmap='hot')
-    axs[0].axis('off')
-    axs[0].set_title('Temperature Image')
-
-    axs[1].imshow(target_image, cmap='binary')
-    axs[1].axis('off')
-    axs[1].set_title('Target Image')
-
     plt.show()
 
 
-def mark_neighboring_pixels(original_temperature, temperature_image, target_image, x, y, threshold, max_dist):
-    if max_dist < 1:
-        return
-    
-    height, width = temperature_image.shape
-    
-    # Set the target pixel at the starting position to 1
-    target_image[y, x] = 1
-    
-    # Check neighboring pixels
-    for i in range(-1, 2):
-        for j in range(-1, 2):
-            if i == 0 and j == 0:
-                continue
-            
-            # Calculate neighboring pixel coordinates
-            nx = x + i
-            ny = y + j
+def extract_subregions(array, labels, height, width, step_fraction):
+    subregions = []
+    array_height, array_width = array.shape
+    step_size = int(min(height, width) * step_fraction)
 
-            # Skip if already set
-            if target_image[ny, nx] == 1:
-                continue
+    for y in range(0, array_height - height + 1, step_size):
+        for x in range(0, array_width - width + 1, step_size):
+            subregion = np.array(array[y:y+height, x:x+width])
+            contains_label = any(
+                label["x"] >= x and label["x"] < x+width and
+                label["y"] >= y and label["y"] < y+height
+                for label in labels
+            )
+            subregions.append((subregion, contains_label))
 
-            # Check if neighboring pixel is within image bounds
-            if ny >= 0 and ny < height and nx >= 0 and nx < width:
-                # Check if temperature difference is below threshold
-                if abs(temperature_image[ny, nx] - original_temperature) < threshold:
-                    # Recursively mark neighboring pixels
-                    mark_neighboring_pixels(original_temperature, temperature_image, target_image, nx, ny, threshold, max_dist-1)
+    return subregions
+
+
+def batch_data(data):
+    arrays = []
+    labels = []
+    batches = []
+
+    for i, (array, label) in enumerate(data):
+        arrays.append(array)
+        labels.append(label)
+
+        if len(arrays) == batch_size or i == (len(data)-1):
+            arrays_tensor = torch.tensor(np.array(arrays), dtype=torch.float32).to(device)
+            labels_tensor = torch.tensor(labels, dtype=torch.float32).to(device)
+
+            batches.append((arrays_tensor, labels_tensor))
+
+            arrays = []
+            labels = []
+    
+    return batches
+
 
 
 def load_npy_files(folder_path, validation_fraction=0.1):
@@ -95,43 +81,26 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             words = file_name.split('_')
             frame_index = int(words[-1].replace(".npy",""))
             video_name = "_".join(words[:-1])
-
             file_path = os.path.join(folder_path, file_name)
-            array = np.load(file_path)
 
+            array = np.load(file_path)
             json_file_path = os.path.join(folder_path, file_name.replace(".npy",".json"))
             with open(json_file_path, 'r') as f:
                 json_data = json.load(f)
-            
-            labeled_array = np.zeros_like(array)
-            for label in json_data['labels']:
-                x = label['x']
-                y = label['y']
-                l = label['l']
-                if l == 1:
-                    labeled_array[y, x] = 1.0
 
-            if labeled_array.max() > 0.01:
-                labeled_array = ndimage.gaussian_filter(labeled_array, sigma=label_width)
-                labeled_array /= labeled_array.max()
-            labeled_array = labeled_array*(1-2*label_fuzzyness) + label_fuzzyness
-            
-            # display_image_target(array, labeled_array)
-            file_name = array.shape
-            if file_name in data:
-                data[file_name].append((frame_index, array, labeled_array))
-                data[file_name].append((frame_index+0.5, np.flip(array, axis=0), np.flip(labeled_array, axis=0)))
+            file_path = os.path.join(folder_path, file_name)
+            if video_name in data:
+                data[video_name].append((frame_index, array, json_data["labels"]))
             else:
-                data[file_name] = [
-                    (frame_index, array, labeled_array),
-                    (frame_index+0.5, np.flip(array, axis=0), np.flip(labeled_array, axis=0)),
+                data[video_name] = [
+                    (frame_index, array, json_data["labels"]),
                 ]
-    
-    for key in data.keys():
-        data[key].sort(key=lambda x: x[0])
-    
+
     train_data_by_resolution = {}
     valid_data_by_resolution = {}
+
+    for video_name in data.keys():
+        data[video_name].sort(key=lambda x: x[0])
 
     for video_name, frames in data.items():
         if len(frames) > 2:
@@ -156,79 +125,69 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     train_data = []
     valid_data = []
 
+    print("Creating subregions")
     for resolution in train_data_by_resolution:
-        data = train_data_by_resolution[resolution]
-        frames = np.stack([frame[1] for frame in data], axis=0)
-        labels = np.stack([frame[2] for frame in data], axis=0)
-        num_batches = np.max([1, frames.shape[0] // batch_size])
-        for i in range(num_batches+1):
-            start_idx = i * batch_size
-            end_idx = (i + 1) * batch_size
-            if start_idx < frames.shape[0]:
-                data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
-                target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
-                train_data.append((data,target))
-        
+        for frame_index, array, json_data in train_data_by_resolution[resolution]:
+            labels = [l for l in json_data if l['l'] == 1]
+
+            train_data += extract_subregions(array, labels, region_size, region_size, 0.5)
+
     for resolution in valid_data_by_resolution:
-        data = valid_data_by_resolution[resolution]
-        frames = np.stack([frame[1] for frame in data], axis=0)
-        labels = np.stack([frame[2] for frame in data], axis=0)
-        num_batches = np.max([1, frames.shape[0] // batch_size])
-        for i in range(num_batches):
-            start_idx = i * batch_size
-            end_idx = (i + 1) * batch_size
-            if start_idx < frames.shape[0]:
-                data = torch.from_numpy(frames[start_idx:end_idx]).float().to(device)
-                target = torch.from_numpy(labels[start_idx:end_idx]).float().to(device)
-                valid_data.append((data,target))
+        for frame_index, array, json_data in valid_data_by_resolution[resolution]:
+            labels = [l for l in json_data if l['l'] == 1]
+
+            valid_data += extract_subregions(array, labels, region_size, region_size, 0.5)
+
+    print("Creating batches")
+    train_data = batch_data(train_data)
+    valid_data = batch_data(valid_data)
             
     return train_data, valid_data
 
 train_data, valid_data = load_npy_files(data_path)
-print(len(train_data), len(valid_data))
-targets = 0
-pixels = 0
+print(f"Training data: {len(train_data)}, Validation data: {len(valid_data)}")
+
+regions = 0
+labels = 0
 for batch in train_data:
-    pixels += batch[1].shape[0]*batch[1].shape[1]*batch[1].shape[2]
-    targets += torch.sum(batch[1]).item()
-print(pixels, targets, pixels / targets)
+    regions += batch[1].shape[0]
+    labels += torch.sum(batch[1]).item()
+
+print("Positive label fraction:", regions / labels)
+
+# for batch in train_data:
+#     print(batch[0].shape)
+#     for i in range(batch_size):
+#         print(batch[1][i].item())
+#         display_image(batch[0][i].numpy())
 
 
-loss_function = nn.BCEWithLogitsLoss(reduction='none')
+loss_function = nn.BCEWithLogitsLoss()
 
 def compute_loss(predictions, labels):
-    #predictions = nn.functional.sigmoid(predictions)
-    batch_size = labels.size(0)
-
     predictions = predictions.view(-1)
     labels = labels.view(-1)
-    weights = torch.ones_like(labels)
-    weights[labels > 0.5] = label_loss_weight
-    loss = loss_function(predictions, labels) * weights
-    loss = torch.sum(loss) / torch.sum(weights)
+    loss = loss_function(predictions, labels)
     return loss
 
 
 def calculate_accuracy(predictions, labels):
     predictions = nn.functional.sigmoid(predictions)
     accuracy = 1.-(labels-predictions).abs()
-    average_at_label = accuracy[labels > 0.8].mean().item()
     average = accuracy.mean().item()
-    return average, average_at_label
+    return average
 
 
-faceDetector = FaceDetector(units).to(device)
+faceDetector = FaceDetector(region_size, region_size, units).to(device)
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
 
 
 
 for epoch in range(num_epochs):
-
     faceDetector.train()
     batch_num = 0
     train_loss = 0
     accuracy = 0
-    accuracy_label = 0
     start_time = time.time()
     for data in train_data:
         frames = data[0]
@@ -241,20 +200,16 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        acc, acc_label = calculate_accuracy(predictions, targets)
-        accuracy_label += acc_label
-        accuracy += acc
+        accuracy += calculate_accuracy(predictions, targets)
         batch_num += 1
 
     batch_time = time.time() - start_time
     train_loss /= batch_num
-    accuracy_label /= batch_num
     accuracy /= batch_num
-    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {accuracy}, Accuracy at label = {accuracy_label}, label weight {label_loss_weight:.0f}, Time: {batch_time:.2f}s")
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {accuracy}, Time: {batch_time:.2f}s")
 
     validation_loss = 0
     validation_accuracy = 0
-    validation_accuracy_label = 0
     total = 0
     with torch.no_grad():
         for data in valid_data:
@@ -265,20 +220,13 @@ for epoch in range(num_epochs):
             loss = compute_loss(predictions, targets)
             validation_loss += loss.item()
 
-            accuracy, accuracy_label = calculate_accuracy(predictions, targets)
-            validation_accuracy_label += accuracy_label
-            validation_accuracy += accuracy
+            validation_accuracy += calculate_accuracy(predictions, targets)
             total += 1
 
         validation_loss /= total
-        validation_accuracy_label /= total
         validation_accuracy /= total
-        print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}, Accuracy at label = {validation_accuracy_label}", flush=True)
+        print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}", flush=True)
 
-    if label_loss_weight > min_label_weight:
-        label_loss_weight *= label_weight_decay
-    else:
-        label_loss_weight = min_label_weight
 
     if epoch%save_every == 0:
         model_state = faceDetector.state_dict()
@@ -294,8 +242,6 @@ for epoch in range(num_epochs):
                 'epoch': epoch,
                 "train_loss": train_loss,
                 "train_accuracy": accuracy,
-                "train_accuracy_label": accuracy_label,
                 "validation_loss": validation_loss,
                 "validation_accuracy": validation_accuracy,
-                "validation_accuracy_label": validation_accuracy_label
             }, f, indent=4)
