@@ -3,9 +3,9 @@ import numpy as np
 import json
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 import time
 
+from subsection_utils import extract_subregions, display_image
 from reduce_model import FaceDetector
 
 data_path = "data/train_data"
@@ -26,30 +26,6 @@ if not os.path.exists("saved"):
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("device:", device)
-
-def display_image(temperature_image):
-    plt.imshow(temperature_image, cmap='hot')
-    plt.axis('off')
-    plt.title('Temperature Image')
-    plt.show()
-
-
-def extract_subregions(array, labels, height, width, step_fraction):
-    subregions = []
-    array_height, array_width = array.shape
-    step_size = int(min(height, width) * step_fraction)
-
-    for y in range(0, array_height - height + 1, step_size):
-        for x in range(0, array_width - width + 1, step_size):
-            subregion = np.array(array[y:y+height, x:x+width])
-            contains_label = any(
-                label["x"] >= x and label["x"] < x+width and
-                label["y"] >= y and label["y"] < y+height
-                for label in labels
-            )
-            subregions.append((subregion, contains_label))
-
-    return subregions
 
 
 def batch_data(data):
@@ -159,12 +135,6 @@ for batch in train_data:
     labels += torch.sum(batch[1]).item()
 
 print("Positive label fraction:", regions / labels)
-
-# for batch in train_data:
-#     print(batch[0].shape)
-#     for i in range(batch_size):
-#         print(batch[1][i].item())
-#         display_image(batch[0][i].numpy())
 
 
 loss_function = nn.BCEWithLogitsLoss()

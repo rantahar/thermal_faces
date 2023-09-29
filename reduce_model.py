@@ -21,6 +21,7 @@ class FaceDetector(nn.Module):
         self.fc2 = nn.Linear(16*units, 1)
 
         self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, temperatures):
         temperatures = temperatures.unsqueeze(1)
