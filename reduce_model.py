@@ -20,6 +20,7 @@ class FaceDetector(nn.Module):
         self.fc2 = nn.Linear(16*units, 1)
 
         self.batch_norm1 = nn.BatchNorm2d(units)
+        self.batch_norm3 = nn.BatchNorm2d(2*units)
 
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
@@ -33,6 +34,7 @@ class FaceDetector(nn.Module):
         out = self.conv2(out)
         out = self.relu(out)
         out = self.conv3(out)
+        out = self.batch_norm3(out)
         out = self.relu(out)
         out = self.conv4(out)
         out = self.relu(out)
