@@ -2,9 +2,10 @@ import sys
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from subsection_utils import extract_subregions, display_image
+from subsection_utils import extract_subregions, plot_boxes_on_image
 from reduce_model import FaceDetector
 
+threshold = 0.2
 units = 16
 section_size = 64
 step_fraction = 0.5
@@ -15,14 +16,6 @@ if len(sys.argv) > 1:
 else:
     units = 16
     path_to_model = f"saved/reduction_model_6_{units}_1000"
-
-
-def visualize_predictions(temperatures, boxes, threshold):
-    plt.imshow(temperatures, cmap='hot')
-    plt.axis('off')
-    plt.title('Temperature Image')
-    plt.show()
-
 
 
 # Load the model from disk
@@ -44,10 +37,18 @@ with torch.no_grad():
     tensor = torch.tensor(arrays)
     predictions = model(tensor).squeeze(0).numpy()
 
+print(predictions.max())
+
+boxes = []
 for i in range(len(regions)):
     array, _, x, y = regions[i]
     output = predictions[i]
-    #display_image(array)
+
+    if output > threshold:
+        print((x, y, section_size, section_size), output)
+        boxes.append((x, y, section_size, section_size))
+    
+print(image.shape)
+plot_boxes_on_image(image, boxes)
         
-    print(x, y, output)
 
