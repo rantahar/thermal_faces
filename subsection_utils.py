@@ -19,10 +19,14 @@ def extract_subregions(array, labels=None, height=32, width=32, step_fraction=0.
     for y in range(0, array_height - height + 1, step_size):
         for x in range(0, array_width - width + 1, step_size):
             subregion = np.array(array[y:y+height, x:x+width])
+            min_x = x+width*0.25
+            min_y = y+height*0.25
+            max_x = x+width*0.75
+            max_y = y+height*0.75
             if labels is not None:
                 contains_label = any(
-                    label["x"] >= x and label["x"] < x+width and
-                    label["y"] >= y and label["y"] < y+height
+                    label["x"] >= min_x and label["x"] < max_x and
+                    label["y"] >= min_y and label["y"] < max_y
                     for label in labels
                 )
             else:

@@ -14,7 +14,7 @@ learning_rate = 1e-4
 region_size = 64
 region_step_fraction = 0.5
 label_weight = 1
-save_every = 500
+save_every = 1
 num_epochs = 10001
 units = 8
 
@@ -108,7 +108,7 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     for resolution in train_data_by_resolution:
         for frame_index, array, json_data in train_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
-            labels = [l for l in json_data]
+            #labels = [l for l in json_data]
             if len(labels) == 0:
                 continue
 
@@ -124,7 +124,7 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     for resolution in valid_data_by_resolution:
         for frame_index, array, json_data in valid_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
-            labels = [l for l in json_data]
+            #labels = [l for l in json_data]
             if len(labels) == 0:
                 continue
 
