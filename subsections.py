@@ -12,6 +12,7 @@ data_path = "data/train_data"
 batch_size = 1000
 learning_rate = 1e-3
 region_size = 32
+region_step_fraction = 0.5
 save_every = 500
 num_epochs = 10001
 units = 16
@@ -130,13 +131,17 @@ def load_npy_files(folder_path, validation_fraction=0.1):
         for frame_index, array, json_data in train_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
 
-            train_data += extract_subregions(array, labels, region_size, region_size, 0.5)
+            train_data += extract_subregions(
+                array, labels, region_size, region_size, region_step_fraction
+            )
 
     for resolution in valid_data_by_resolution:
         for frame_index, array, json_data in valid_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
 
-            valid_data += extract_subregions(array, labels, region_size, region_size, 0.5)
+            valid_data += extract_subregions(
+                array, labels, region_size, region_size, region_step_fraction
+            )
 
     print("Creating batches")
     train_data = batch_data(train_data)
