@@ -197,9 +197,6 @@ print(pixels, targets, pixels / targets)
 loss_function = nn.BCEWithLogitsLoss(reduction='none')
 
 def compute_loss(predictions, labels):
-    #predictions = nn.functional.sigmoid(predictions)
-    batch_size = labels.size(0)
-
     predictions = predictions.view(-1)
     labels = labels.view(-1)
     weights = torch.ones_like(labels)
