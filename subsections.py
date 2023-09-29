@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import time
 
-from subsection_utils import extract_subregions, display_image
+from subsection_utils import extract_subregions, plot_boxes_on_image
 from reduce_model import FaceDetector
 
 data_path = "data/train_data"
@@ -13,6 +13,7 @@ batch_size = 100
 learning_rate = 1e-4
 region_size = 64
 region_step_fraction = 0.5
+label_weight = 1
 save_every = 500
 num_epochs = 10001
 units = 8
@@ -39,7 +40,7 @@ def batch_data(data):
 
         if len(arrays) == batch_size or i == (len(data)-1):
             arrays_tensor = torch.tensor(np.array(arrays), dtype=torch.float32).to(device)
-            label = 0.02+0.96*np.array(labels)
+            label = np.array(labels)
             labels_tensor = torch.tensor(label, dtype=torch.float32).to(device)
 
             batches.append((arrays_tensor, labels_tensor))
@@ -107,14 +108,25 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     for resolution in train_data_by_resolution:
         for frame_index, array, json_data in train_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
+            labels = [l for l in json_data]
+            if len(labels) == 0:
+                continue
 
-            train_data += extract_subregions(
+            regions = extract_subregions(
                 array, labels, region_size, region_size, region_step_fraction
             )
+            train_data += regions
+
+            #boxes = [(r[2], r[3], region_size, region_size) for r in regions if r[1] > 0.5]
+            #plot_boxes_on_image(array, boxes)
+
 
     for resolution in valid_data_by_resolution:
         for frame_index, array, json_data in valid_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
+            labels = [l for l in json_data]
+            if len(labels) == 0:
+                continue
 
             valid_data += extract_subregions(
                 array, labels, region_size, region_size, region_step_fraction
@@ -125,6 +137,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     valid_data = batch_data(valid_data)
             
     return train_data, valid_data
+
+
 
 train_data, valid_data = load_npy_files(data_path)
 print(f"Training data: {len(train_data)}, Validation data: {len(valid_data)}")
@@ -138,12 +152,16 @@ for batch in train_data:
 print("Positive label fraction:", regions / labels)
 
 
-loss_function = nn.BCEWithLogitsLoss()
+
+loss_function = nn.BCEWithLogitsLoss(reduction='none')
 
 def compute_loss(predictions, labels):
     predictions = predictions.view(-1)
     labels = labels.view(-1)
-    loss = loss_function(predictions, labels)
+    weights = torch.ones_like(labels)
+    weights[labels > 0.5] = label_weight
+    loss = loss_function(predictions, labels) * weights
+    loss = torch.sum(loss) / predictions.shape[0]
     return loss
 
 
@@ -164,6 +182,7 @@ for epoch in range(num_epochs):
     batch_num = 0
     train_loss = 0
     train_accuracy = 0
+    std = 0
     start_time = time.time()
     for i, data in enumerate(train_data):
         frames = data[0]
@@ -176,11 +195,12 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        #std = predictions.detach().numpy().std()
-        #print(std)
+        std += predictions.detach().numpy().std()
 
         accuracy = calculate_accuracy(predictions, targets)
         train_accuracy += accuracy
+
+        #print(std, loss.detach().item(), accuracy, targets.numpy().sum())
         #print(i, loss.item(), accuracy)
         #print(predictions.detach().numpy())
         #print(targets.detach().numpy())
@@ -189,10 +209,12 @@ for epoch in range(num_epochs):
     batch_time = time.time() - start_time
     train_loss /= batch_num
     train_accuracy /= batch_num
-    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {train_accuracy}, Time: {batch_time:.2f}s")
+    std /= batch_num
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {train_accuracy}, std = {std}, Time: {batch_time:.2f}s")
 
     validation_loss = 0
     validation_accuracy = 0
+    std = 0
     total = 0
     with torch.no_grad():
         for data in valid_data:
@@ -202,13 +224,15 @@ for epoch in range(num_epochs):
             predictions = faceDetector(frames)
             loss = compute_loss(predictions, targets)
             validation_loss += loss.item()
+            std += predictions.detach().numpy().std()
 
             validation_accuracy += calculate_accuracy(predictions, targets)
             total += 1
 
         validation_loss /= total
         validation_accuracy /= total
-        print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}", flush=True)
+        std /= total
+        print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}, std = {std}", flush=True)
 
 
     if epoch%save_every == 0:
