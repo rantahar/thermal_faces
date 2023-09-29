@@ -11,14 +11,14 @@ from reduce_model import FaceDetector
 data_path = "data/train_data"
 batch_size = 1000
 learning_rate = 1e-3
-region_size = 60
+region_size = 32
 save_every = 500
 num_epochs = 10001
-units = 128
+units = 16
 
 print("units:", units)
 
-save_path = f"saved/reduction_model_4_{units}"
+save_path = f"saved/reduction_model_6_{units}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
