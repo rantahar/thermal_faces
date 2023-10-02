@@ -15,7 +15,7 @@ region_size = 48
 region_step_fraction = 0.1
 keep_fraction = 0.01
 label_keep_fraction = 1
-save_every = 1
+save_every = 100
 num_epochs = 10001
 units = 16
 
