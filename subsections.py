@@ -9,18 +9,20 @@ from subsection_utils import extract_subregions, plot_boxes_on_image
 from reduce_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 100
+batch_size = 50
 learning_rate = 1e-4
-region_size = 64
-region_step_fraction = 0.5
+region_size = 48
+region_step_fraction = 0.1
 label_weight = 1
-save_every = 100
+keep_fraction = 0.01
+label_keep_fraction = 1
+save_every = 1
 num_epochs = 10001
 units = 16
 
 print("units:", units)
 
-save_path = f"saved/reduction_model_6_{units}"
+save_path = f"saved/reduction_model_{units}_{region_size}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
@@ -30,25 +32,29 @@ print("device:", device)
 
 
 def batch_data(data):
-    arrays = []
-    labels = []
-    batches = []
+    positive_arrays = []
+    negative_arrays = []
+    positive_batches = []
+    negative_batches = []
 
     for i, (array, label, _ , _) in enumerate(data):
-        arrays.append(array)
-        labels.append(label)
+        if label:
+            positive_arrays.append(array)
+        else:
+            negative_arrays.append(array)
 
-        if len(arrays) == batch_size or i == (len(data)-1):
-            arrays_tensor = torch.tensor(np.array(arrays), dtype=torch.float32).to(device)
-            label = np.array(labels)
-            labels_tensor = torch.tensor(label, dtype=torch.float32).to(device)
+        if len(positive_arrays) == batch_size or i == (len(data)-1):
+            positive_arrays_tensor = torch.tensor(np.array(positive_arrays), dtype=torch.float32).to(device)
+            positive_batches.append(positive_arrays_tensor)
+            positive_arrays = []
 
-            batches.append((arrays_tensor, labels_tensor))
+        if len(negative_arrays) == batch_size or i == (len(data)-1):
+            negative_arrays_tensor = torch.tensor(np.array(negative_arrays), dtype=torch.float32).to(device)
+            negative_batches.append(negative_arrays_tensor)
+            negative_arrays = []
 
-            arrays = []
-            labels = []
-    
-    return batches
+
+    return positive_batches, negative_batches
 
 
 
@@ -115,7 +121,13 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             regions = extract_subregions(
                 array, labels, region_size, region_size, region_step_fraction
             )
-            train_data += regions
+            for region in regions:
+                if region[1]:
+                    if np.random.choice([True, False], 1, p=[label_keep_fraction,1-label_keep_fraction]):
+                        train_data.append(region)
+                else:
+                    if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
+                        train_data.append(region)
 
             #boxes = [(r[2], r[3], region_size, region_size) for r in regions if r[1] > 0.5]
             #plot_boxes_on_image(array, boxes)
@@ -128,52 +140,53 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             if len(labels) == 0:
                 continue
 
-            valid_data += extract_subregions(
+            regions = extract_subregions(
                 array, labels, region_size, region_size, region_step_fraction
             )
+            for region in regions:
+                if region[1]:
+                    if np.random.choice([True, False], 1, p=[label_keep_fraction,1-label_keep_fraction]):
+                        valid_data.append(region)
+                else:
+                    if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
+                        valid_data.append(region)
+
 
     print("Creating batches")
-    train_data = batch_data(train_data)
-    valid_data = batch_data(valid_data)
+    train_data_positive, train_data_negative = batch_data(train_data)
+    valid_data_positive, valid_data_negative = batch_data(valid_data)
             
-    return train_data, valid_data
+    return (train_data_positive, train_data_negative), (valid_data_positive, valid_data_negative)
 
 
 
 train_data, valid_data = load_npy_files(data_path)
-print(f"Training data: {len(train_data)}, Validation data: {len(valid_data)}")
-
-regions = 0
-labels = 0
-for batch in train_data:
-    regions += batch[1].shape[0]
-    labels += torch.sum(batch[1]).item()
-
-print("Positive label fraction:", regions / labels)
+print(f"Positive training data: {len(train_data[0])}, negative: {len(train_data[1])}")
+print(f"Negative validation data: {len(valid_data[0])}, negative: {len(valid_data[1])}")
 
 
 
-loss_function = nn.BCEWithLogitsLoss(reduction='none')
+loss_function = nn.BCEWithLogitsLoss()
 
-def compute_loss(predictions, labels):
-    predictions = predictions.view(-1)
-    labels = labels.view(-1)
-    weights = torch.ones_like(labels)
-    weights[labels > 0.5] = label_weight
-    loss = loss_function(predictions, labels) * weights
-    loss = torch.sum(loss) / predictions.shape[0]
+def compute_loss(positive, negative):
+    loss = loss_function(positive, torch.ones_like(positive))
+    loss += loss_function(negative, torch.zeros_like(negative))
     return loss
 
 
-def calculate_accuracy(predictions, labels):
-    predictions = nn.functional.sigmoid(predictions)
-    accuracy = 1.-(labels-predictions).abs()
-    average = accuracy.mean().item()
-    return average
+def calculate_accuracy(positive, negative):
+    positive = nn.functional.sigmoid(positive)
+    negative = nn.functional.sigmoid(negative)
+    return 0.5*(positive.mean().item() + (1-negative.mean().item()))
 
 
 faceDetector = FaceDetector(region_size, region_size, units).to(device)
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
+
+
+import itertools
+negative_train_data = itertools.cycle(train_data[1])
+negative_valid_data = itertools.cycle(valid_data[1])
 
 
 
@@ -184,26 +197,20 @@ for epoch in range(num_epochs):
     train_accuracy = 0
     std = 0
     start_time = time.time()
-    for i, data in enumerate(train_data):
-        frames = data[0]
-        targets = data[1]
+    for i, data in enumerate(train_data[0]):
+        positive_data = data
+        negative_data = next(negative_train_data)
 
-        predictions = faceDetector(frames)
-        loss = compute_loss(predictions, targets)
+        positive_predictions = faceDetector(positive_data)
+        negative_predictions = faceDetector(negative_data)
+        loss = compute_loss(positive_predictions, negative_predictions)
         train_loss += loss.item()
 
         loss.backward()
         optimizer.step()
 
-        std += predictions.detach().numpy().std()
-
-        accuracy = calculate_accuracy(predictions, targets)
-        train_accuracy += accuracy
-
-        #print(std, loss.detach().item(), accuracy, targets.numpy().sum())
-        #print(i, loss.item(), accuracy)
-        #print(predictions.detach().numpy())
-        #print(targets.detach().numpy())
+        std += positive_predictions.detach().numpy().std() + negative_predictions.detach().numpy().std()
+        train_accuracy += calculate_accuracy(positive_predictions, negative_predictions)
         batch_num += 1
 
     batch_time = time.time() - start_time
@@ -217,16 +224,17 @@ for epoch in range(num_epochs):
     std = 0
     total = 0
     with torch.no_grad():
-        for data in valid_data:
-            frames = data[0]
-            targets = data[1]
+        for data in valid_data[0]:
+            positive_data = data
+            negative_data = next(negative_valid_data)
 
-            predictions = faceDetector(frames)
-            loss = compute_loss(predictions, targets)
+            positive_predictions = faceDetector(positive_data)
+            negative_predictions = faceDetector(negative_data)
+            loss = compute_loss(positive_predictions, negative_predictions)
             validation_loss += loss.item()
-            std += predictions.detach().numpy().std()
 
-            validation_accuracy += calculate_accuracy(predictions, targets)
+            std += positive_predictions.detach().numpy().std() + negative_predictions.detach().numpy().std()
+            validation_accuracy += calculate_accuracy(positive_predictions, negative_predictions)
             total += 1
 
         validation_loss /= total
@@ -241,6 +249,8 @@ for epoch in range(num_epochs):
             {
                 'model_state_dict': faceDetector.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'units': units,
+                'region_size': region_size
             },
             f"{save_path}_{epoch}"
         )
@@ -248,7 +258,7 @@ for epoch in range(num_epochs):
             json.dump({
                 'epoch': epoch,
                 "train_loss": train_loss,
-                "train_accuracy": accuracy,
+                "train_accuracy": train_accuracy,
                 "validation_loss": validation_loss,
                 "validation_accuracy": validation_accuracy,
             }, f, indent=4)
