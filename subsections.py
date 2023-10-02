@@ -13,7 +13,6 @@ batch_size = 50
 learning_rate = 1e-4
 region_size = 48
 region_step_fraction = 0.1
-label_weight = 1
 keep_fraction = 0.01
 label_keep_fraction = 1
 save_every = 1
