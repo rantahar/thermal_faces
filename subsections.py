@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import time
 import random
+import itertools
 
 from subsection_utils import extract_subregions, plot_boxes_on_image
 from reduce_model import FaceDetector
@@ -16,9 +17,10 @@ region_size = 48
 region_step_fraction = 0.1
 keep_fraction = 0.01
 label_keep_fraction = 1
+negatives_per_positive = 5
 save_every = 100
 num_epochs = 10001
-units = 16
+units = 8
 
 print("units:", units)
 
@@ -164,21 +166,23 @@ def load_npy_files(folder_path, validation_fraction=0.1):
 
 train_data, valid_data = load_npy_files(data_path)
 print(f"Positive training data: {len(train_data[0])}, negative: {len(train_data[1])}")
-print(f"Negative validation data: {len(valid_data[0])}, negative: {len(valid_data[1])}")
+print(f"Positive validation data: {len(valid_data[0])}, negative: {len(valid_data[1])}")
 
 
 
 loss_function = nn.BCEWithLogitsLoss()
 
 def compute_loss(positive, negative):
-    loss = loss_function(positive, torch.ones_like(positive))
-    loss += loss_function(negative, torch.zeros_like(negative))
+    predictions = torch.cat([positive, negative])
+    targets = torch.cat([torch.ones_like(positive), torch.zeros_like(negative)])
+    loss = loss_function(predictions, targets)
     return loss
 
 
 def calculate_accuracy(positive, negative):
     positive = nn.functional.sigmoid(positive)
     negative = nn.functional.sigmoid(negative)
+    #print(positive.detach().cpu().numpy().mean(), negative.detach().cpu().numpy().mean())
     return 0.5*(positive.mean().item() + (1-negative.mean().item()))
 
 
@@ -186,7 +190,6 @@ faceDetector = FaceDetector(region_size, region_size, units).to(device)
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
 
 
-import itertools
 negative_train_data = itertools.cycle(train_data[1])
 negative_valid_data = itertools.cycle(valid_data[1])
 
@@ -201,7 +204,7 @@ for epoch in range(num_epochs):
     start_time = time.time()
     for i, data in enumerate(train_data[0]):
         positive_data = data
-        negative_data = next(negative_train_data)
+        negative_data = torch.cat([next(negative_train_data) for i in range(negatives_per_positive)])
         #negative_data = random.sample(train_data[1])
 
         positive_predictions = faceDetector(positive_data)
@@ -229,7 +232,8 @@ for epoch in range(num_epochs):
     with torch.no_grad():
         for data in valid_data[0]:
             positive_data = data
-            negative_data = next(negative_valid_data)
+            #negative_data = next(negative_valid_data)
+            negative_data = torch.cat([next(negative_valid_data) for i in range(negatives_per_positive)])
             #negative_data = random.sample(valid_data[1])
 
             positive_predictions = faceDetector(positive_data)
