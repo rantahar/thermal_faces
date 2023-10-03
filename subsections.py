@@ -162,85 +162,69 @@ print(f"Positive validation data: {len(valid_data[0])}, negative: {len(valid_dat
 
 
 
-loss_function = nn.BCEWithLogitsLoss()
-
-def compute_loss(positive, negative):
-    predictions = torch.cat([positive, negative])
-    targets = torch.cat([torch.ones_like(positive), torch.zeros_like(negative)])
-    loss = loss_function(predictions, targets)
-    return loss
-
-
-def calculate_accuracy(positive, negative):
-    positive = nn.functional.sigmoid(positive)
-    negative = nn.functional.sigmoid(negative)
-    #print(positive.detach().cpu().numpy().mean(), negative.detach().cpu().numpy().mean())
-    return 0.5*(positive.mean().item() + (1-negative.mean().item()))
-
-
 faceDetector = FaceDetector(region_size, region_size, units).to(device)
 optimizer = torch.optim.Adam(faceDetector.parameters(), lr=learning_rate)
+loss_function = nn.BCEWithLogitsLoss()
 
-
+# Cyclical iterator to get batches of negative examples. Helps in balancing
+# positive and negative examples when there are many more negative ones.
 negative_train_data = itertools.cycle(train_data[1])
-negative_valid_data = itertools.cycle(valid_data[1])
-
 
 
 for epoch in range(num_epochs):
     faceDetector.train()
-    batch_num = 0
+    negative_batches = 0
+    positive_batches = 0
     train_loss = 0
-    train_accuracy = 0
-    std = 0
+    train_accuracy_positive = 0
+    train_accuracy_negative = 0
     start_time = time.time()
     for i, data in enumerate(train_data[0]):
-        positive_data = data
-        negative_data = torch.cat([next(negative_train_data) for i in range(negatives_per_positive)])
-        #negative_data = random.sample(train_data[1])
+        positive_predictions = faceDetector(data)
+        loss = loss_function(positive_predictions, torch.ones_like(positive_predictions))
+        train_accuracy_positive += nn.functional.sigmoid(positive_predictions).mean().item()
 
-        positive_predictions = faceDetector(positive_data)
-        negative_predictions = faceDetector(negative_data)
-        loss = compute_loss(positive_predictions, negative_predictions)
-        train_loss += loss.item()
+        for i in range(negatives_per_positive):
+            negative_data = next(negative_train_data)
+            negative_predictions = faceDetector(negative_data)
+            loss += loss_function(negative_predictions, torch.zeros_like(negative_predictions))
+            train_accuracy_negative += 1 - nn.functional.sigmoid(negative_predictions).mean().item()
+            negative_batches += 1
 
         loss.backward()
         optimizer.step()
 
-        std += positive_predictions.detach().cpu().numpy().std() + negative_predictions.detach().cpu().numpy().std()
-        train_accuracy += calculate_accuracy(positive_predictions, negative_predictions)
-        batch_num += 1
+        train_loss += loss.item()
+        positive_batches += 1
 
     batch_time = time.time() - start_time
-    train_loss /= batch_num
-    train_accuracy /= batch_num
-    std /= batch_num
-    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy = {train_accuracy}, std = {std}, Time: {batch_time:.2f}s")
+    train_loss /= negative_batches + positive_batches
+    train_accuracy_positive /= positive_batches
+    train_accuracy_negative /= negative_batches
+    print(f"Epoch {epoch}: Loss = {train_loss}, Accuracy positive = {train_accuracy_positive}, Accuracy negative {train_accuracy_negative}, Time: {batch_time:.2f}s")
 
     validation_loss = 0
-    validation_accuracy = 0
-    std = 0
-    total = 0
+    validation_accuracy_positive = 0
+    validation_accuracy_negative = 0
+    total_positive = 0
+    total_negative = 0
     with torch.no_grad():
         for data in valid_data[0]:
-            positive_data = data
-            #negative_data = next(negative_valid_data)
-            negative_data = torch.cat([next(negative_valid_data) for i in range(negatives_per_positive)])
-            #negative_data = random.sample(valid_data[1])
+            predictions = faceDetector(data)
+            validation_loss += loss_function(predictions, torch.ones_like(predictions)).item()
+            validation_accuracy_positive += nn.functional.sigmoid(predictions).mean().item()
+            total_positive += 1
+        
+        for data in valid_data[1]:
+            predictions = faceDetector(data)
+            validation_loss += loss_function(predictions, torch.zeros_like(predictions)).item()
+            validation_accuracy_negative += 1-nn.functional.sigmoid(predictions).mean().item()
+            total_negative += 1
 
-            positive_predictions = faceDetector(positive_data)
-            negative_predictions = faceDetector(negative_data)
-            loss = compute_loss(positive_predictions, negative_predictions)
-            validation_loss += loss.item()
-
-            std += positive_predictions.detach().cpu().numpy().std() + negative_predictions.detach().cpu().numpy().std()
-            validation_accuracy += calculate_accuracy(positive_predictions, negative_predictions)
-            total += 1
-
-        validation_loss /= total
-        validation_accuracy /= total
-        std /= total
-        print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}, std = {std}", flush=True)
+        validation_loss /= total_positive + total_negative
+        validation_accuracy_positive /= total_positive
+        validation_accuracy_negative /= total_negative
+        print(f"Validation: Loss = {validation_loss}, Accuracy positive = {validation_accuracy_positive}, Accuracy negative {validation_accuracy_negative}", flush=True)
 
 
     if epoch%save_every == 0:
@@ -258,7 +242,9 @@ for epoch in range(num_epochs):
             json.dump({
                 'epoch': epoch,
                 "train_loss": train_loss,
-                "train_accuracy": train_accuracy,
+                "train_accuracy_positive": train_accuracy_positive,
+                "train_accuracy_negative": train_accuracy_negative,
                 "validation_loss": validation_loss,
-                "validation_accuracy": validation_accuracy,
+                "validation_accuracy_positive": validation_accuracy_positive,
+                "validation_accuracy_negative": validation_accuracy_negative,
             }, f, indent=4)
