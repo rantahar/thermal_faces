@@ -11,20 +11,12 @@ from subsection_utils import extract_subregions
 from reduce_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 10
-learning_rate = 1e-5
+batch_size = 100
 region_size = 48
 region_step_fraction = 0.1
 keep_fraction = 0.01
 label_keep_fraction = 1
-negatives_per_positive = 5
-save_every = 100
-num_epochs = 10001
-units = 8
 
-print("units:", units)
-
-save_path = f"saved/reduction_model_{units}_{region_size}"
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
@@ -38,7 +30,7 @@ def batch_data(data):
     data = torch.tensor(np.array(data, dtype=np.float32), dtype=torch.float32)
     n_batches = data.shape[0]//batch_size
     data = data[:n_batches*batch_size]
-    batches = torch.reshape(data, [-1, batch_size, 48, 48])
+    batches = torch.reshape(data, [-1, batch_size, region_size, region_size])
 
     return batches
 
@@ -62,8 +54,6 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             file_path = os.path.join(folder_path, file_name)
             if video_name in data:
                 data[video_name].append((frame_index, array, json_data["labels"]))
-                if len(data[video_name]) > 2:
-                    break
             else:
                 data[video_name] = [
                     (frame_index, array, json_data["labels"]),
@@ -156,3 +146,4 @@ torch.save(train_data_positive, 'train_data_positive.pt')
 torch.save(train_data_negative, 'train_data_negative.pt')
 torch.save(valid_data_positive, 'valid_data_positive.pt')
 torch.save(valid_data_negative, 'valid_data_negative.pt')
+
