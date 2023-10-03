@@ -34,29 +34,17 @@ print("device:", device)
 
 
 def batch_data(data):
-    positive_arrays = []
-    negative_arrays = []
-    positive_batches = []
-    negative_batches = []
+    arrays = []
+    batches = []
 
-    for i, (array, label, _ , _) in enumerate(data):
-        if label:
-            positive_arrays.append(array)
-        else:
-            negative_arrays.append(array)
+    for i, array in enumerate(data):
+        arrays.append(array)
+        if len(arrays) == batch_size or i == (len(data)-1):
+            arrays_tensor = torch.tensor(np.array(arrays), dtype=torch.float32).to(device)
+            batches.append(arrays_tensor)
+            arrays = []
 
-        if len(positive_arrays) == batch_size or i == (len(data)-1):
-            positive_arrays_tensor = torch.tensor(np.array(positive_arrays), dtype=torch.float32).to(device)
-            positive_batches.append(positive_arrays_tensor)
-            positive_arrays = []
-
-        if len(negative_arrays) == batch_size or i == (len(data)-1):
-            negative_arrays_tensor = torch.tensor(np.array(negative_arrays), dtype=torch.float32).to(device)
-            negative_batches.append(negative_arrays_tensor)
-            negative_arrays = []
-
-
-    return positive_batches, negative_batches
+    return batches
 
 
 
@@ -109,14 +97,15 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             else:
                 valid_data_by_resolution[resolution] += valid_frames
 
-    train_data = []
-    valid_data = []
+    train_data_positive = []
+    train_data_negative = []
+    valid_data_positive = []
+    valid_data_negative = []
 
     print("Creating subregions")
     for resolution in train_data_by_resolution:
         for frame_index, array, json_data in train_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
-            #labels = [l for l in json_data]
             if len(labels) == 0:
                 continue
 
@@ -126,10 +115,10 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             for region in regions:
                 if region[1]:
                     if np.random.choice([True, False], 1, p=[label_keep_fraction,1-label_keep_fraction]):
-                        train_data.append(region)
+                        train_data_positive.append(region[0])
                 else:
                     if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
-                        train_data.append(region)
+                        train_data_negative.append(region[0])
 
             #boxes = [(r[2], r[3], region_size, region_size) for r in regions if r[1] > 0.5]
             #plot_boxes_on_image(array, boxes)
@@ -138,7 +127,6 @@ def load_npy_files(folder_path, validation_fraction=0.1):
     for resolution in valid_data_by_resolution:
         for frame_index, array, json_data in valid_data_by_resolution[resolution]:
             labels = [l for l in json_data if l['l'] == 1]
-            #labels = [l for l in json_data]
             if len(labels) == 0:
                 continue
 
@@ -148,17 +136,21 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             for region in regions:
                 if region[1]:
                     if np.random.choice([True, False], 1, p=[label_keep_fraction,1-label_keep_fraction]):
-                        valid_data.append(region)
+                        valid_data_positive.append(region[0])
                 else:
                     if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
-                        valid_data.append(region)
+                        valid_data_negative.append(region[0])
 
 
     print("Creating batches")
-    random.shuffle(train_data)
-    random.shuffle(valid_data)
-    train_data_positive, train_data_negative = batch_data(train_data)
-    valid_data_positive, valid_data_negative = batch_data(valid_data)
+    random.shuffle(train_data_positive)
+    random.shuffle(train_data_negative)
+    random.shuffle(valid_data_positive)
+    random.shuffle(valid_data_negative)
+    train_data_positive = batch_data(train_data_positive)
+    train_data_negative = batch_data(train_data_negative)
+    valid_data_positive = batch_data(valid_data_positive)
+    valid_data_negative = batch_data(valid_data_negative)
     
     return (train_data_positive, train_data_negative), (valid_data_positive, valid_data_negative)
 
