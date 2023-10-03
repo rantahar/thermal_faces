@@ -4,13 +4,14 @@ import json
 import torch
 import torch.nn as nn
 import time
+import random
 
 from subsection_utils import extract_subregions, plot_boxes_on_image
 from reduce_model import FaceDetector
 
 data_path = "data/train_data"
-batch_size = 50
-learning_rate = 1e-4
+batch_size = 100
+learning_rate = 1e-5
 region_size = 48
 region_step_fraction = 0.1
 keep_fraction = 0.01
@@ -152,9 +153,11 @@ def load_npy_files(folder_path, validation_fraction=0.1):
 
 
     print("Creating batches")
+    random.shuffle(train_data)
+    random.shuffle(valid_data)
     train_data_positive, train_data_negative = batch_data(train_data)
     valid_data_positive, valid_data_negative = batch_data(valid_data)
-            
+    
     return (train_data_positive, train_data_negative), (valid_data_positive, valid_data_negative)
 
 
@@ -199,6 +202,7 @@ for epoch in range(num_epochs):
     for i, data in enumerate(train_data[0]):
         positive_data = data
         negative_data = next(negative_train_data)
+        #negative_data = random.sample(train_data[1])
 
         positive_predictions = faceDetector(positive_data)
         negative_predictions = faceDetector(negative_data)
@@ -208,7 +212,7 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        std += positive_predictions.detach().numpy().std() + negative_predictions.detach().numpy().std()
+        std += positive_predictions.detach().cpu().numpy().std() + negative_predictions.detach().cpu().numpy().std()
         train_accuracy += calculate_accuracy(positive_predictions, negative_predictions)
         batch_num += 1
 
@@ -226,13 +230,14 @@ for epoch in range(num_epochs):
         for data in valid_data[0]:
             positive_data = data
             negative_data = next(negative_valid_data)
+            #negative_data = random.sample(valid_data[1])
 
             positive_predictions = faceDetector(positive_data)
             negative_predictions = faceDetector(negative_data)
             loss = compute_loss(positive_predictions, negative_predictions)
             validation_loss += loss.item()
 
-            std += positive_predictions.detach().numpy().std() + negative_predictions.detach().numpy().std()
+            std += positive_predictions.detach().cpu().numpy().std() + negative_predictions.detach().cpu().numpy().std()
             validation_accuracy += calculate_accuracy(positive_predictions, negative_predictions)
             total += 1
 
