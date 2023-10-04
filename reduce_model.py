@@ -26,7 +26,7 @@ class FaceDetector(nn.Module):
 
     def forward(self, temperatures):
         temperatures = temperatures.unsqueeze(1)
-        out = temperatures/20-20
+        out = temperatures/40
 
         out = self.conv1(out)
         #out = self.batch_norm1(out)
