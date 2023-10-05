@@ -2,21 +2,18 @@ import os
 import numpy as np
 import json
 import torch
-import torch.nn as nn
-import time
 import random
-import itertools
 
-from subsection_utils import extract_subregions
-from reduce_model import FaceDetector
+from subsection_utils import extract_rescaled_subregions
 
 data_path = "data/train_data"
 batch_size = 100
-region_size = 48
+region_sizes = [32, 48, 64]
 region_step_fraction = 0.1
 keep_fraction = 0.01
 label_keep_fraction = 1
 
+region_size = min(region_sizes)
 
 if not os.path.exists("saved"):
     os.makedirs("saved")
@@ -33,7 +30,6 @@ def batch_data(data):
     batches = torch.reshape(data, [-1, batch_size, region_size, region_size])
 
     return batches
-
 
 
 def load_npy_files(folder_path, validation_fraction=0.1):
@@ -54,6 +50,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             file_path = os.path.join(folder_path, file_name)
             if video_name in data:
                 data[video_name].append((frame_index, array, json_data["labels"]))
+                if len(data[video_name]) > 5:
+                    break
             else:
                 data[video_name] = [
                     (frame_index, array, json_data["labels"]),
@@ -97,8 +95,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             if len(labels) == 0:
                 continue
 
-            regions = extract_subregions(
-                array, labels, region_size, region_size, region_step_fraction
+            regions = extract_rescaled_subregions(
+                array, labels, [32, 48, 64], region_step_fraction
             )
             for region in regions:
                 if region[1]:
@@ -115,8 +113,8 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             if len(labels) == 0:
                 continue
 
-            regions = extract_subregions(
-                array, labels, region_size, region_size, region_step_fraction
+            regions = extract_rescaled_subregions(
+                array, labels, [32, 48, 64], region_step_fraction
             )
             for region in regions:
                 if region[1]:

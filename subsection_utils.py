@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+import cv2
 
 
 def display_image(temperature_image):
@@ -36,22 +37,37 @@ def extract_subregions(array, labels=None, height=32, width=32, step_fraction=0.
     return subregions
 
 
-def plot_boxes_on_image(image, boxes):
-    # Create figure and axes
-    fig, ax = plt.subplots(1)
+def extract_rescaled_subregions(image, labels, sizes, step_fraction=0.5):
+    subregions = []
+    smallest_size = min(sizes)
     
-    # Display the image
+    for size in sizes:
+        subregions += (extract_subregions(image, labels, size, size, step_fraction))
+    
+    # Resize all subregions to the smallest size
+    resized_subregions = []
+    for subregion, label, x, y in subregions:
+        resized_subregion = cv2.resize(subregion, (smallest_size, smallest_size))
+        resized_subregions.append((resized_subregion, label, x, y))
+    
+    return resized_subregions
+
+
+def plot_boxes_on_image(image, boxes):
+    _, ax = plt.subplots(1)
     ax.imshow(image, cmap='gray')
     
-    # Add bounding boxes to the image
     for box in boxes:
         rect = patches.Rectangle(
             (box[0], box[1]), box[2], box[3],
             linewidth=1, edgecolor='r', facecolor='none'
         )
         ax.add_patch(rect)
-    
-    # Show plot
+        
+        ax.text(box[0], box[1], f'{box[4]:.2f}', bbox=dict(facecolor='white', alpha=0.2, edgecolor='none'))
+
+
+
     plt.show()
 
 
@@ -74,7 +90,7 @@ def calculate_iou(box1, boxes):
 
 def non_max_suppression(boxes, threshold):
     scores = np.array([b[4] for b in boxes])
-    boxes = np.array([(b[0], b[1], b[2], b[3]) for b in boxes])
+    boxes = np.array(boxes)
 
     # Sort the scores in descending order
     sorted_indices = np.argsort(scores)[::-1]
