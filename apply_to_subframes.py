@@ -3,10 +3,10 @@ import torch
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from subsection_utils import extract_subregions, plot_boxes_on_image
+from subsection_utils import extract_subregions, plot_boxes_on_image, non_max_suppression
 from reduce_model import FaceDetector
 
-threshold = 0.5
+threshold = 0.98
 units = 16
 region_size = 64
 step_fraction = 0.2
@@ -46,12 +46,6 @@ with torch.no_grad():
     tensor = torch.tensor(arrays)
     predictions = model(tensor).squeeze(0).numpy()
 
-for i in range(len(regions)):
-    if labels[i]:
-        print(i, labels[i], "true:", predictions[i])
-    #else:
-    #    print(i, labels[i], "false:", 1-predictions[i])
-
 print(predictions.max())
 threshold = threshold * predictions.max()
 
@@ -61,10 +55,14 @@ for i in range(len(regions)):
     output = predictions[i]
 
     if output > threshold:
-        print((x, y, region_size, region_size), output)
-        boxes.append((x, y, region_size, region_size))
+        print((x, y, region_size, region_size, output), output)
+        boxes.append((x, y, region_size, region_size, output))
     
-print(image.shape)
 plot_boxes_on_image(image, boxes)
-        
+
+boxes = non_max_suppression(boxes, 0.05)
+
+plot_boxes_on_image(image, boxes)
+
+
 

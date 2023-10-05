@@ -45,8 +45,54 @@ def plot_boxes_on_image(image, boxes):
     
     # Add bounding boxes to the image
     for box in boxes:
-        rect = patches.Rectangle((box[0], box[1]), box[2], box[3], linewidth=1, edgecolor='r', facecolor='none')
+        rect = patches.Rectangle(
+            (box[0], box[1]), box[2], box[3],
+            linewidth=1, edgecolor='r', facecolor='none'
+        )
         ax.add_patch(rect)
     
     # Show plot
     plt.show()
+
+
+def calculate_iou(box1, boxes):
+    intersection_x1 = np.maximum(box1[0], boxes[:, 0])
+    intersection_y1 = np.maximum(box1[1], boxes[:, 1])
+    intersection_x2 = np.minimum(box1[0] + box1[2], boxes[:, 0] + boxes[:, 2])
+    intersection_y2 = np.minimum(box1[1] + box1[3], boxes[:, 1] + boxes[:, 3])
+
+    intersection_width = np.maximum(0, intersection_x2 - intersection_x1)
+    intersection_height = np.maximum(0, intersection_y2 - intersection_y1)
+
+    intersection_areas = intersection_width * intersection_height
+    box1_area = box1[2] * box1[3]
+    box_areas = boxes[:, 2] * boxes[:, 3]
+
+    iou = intersection_areas / (box1_area + box_areas - intersection_areas)
+    return iou
+
+
+def non_max_suppression(boxes, threshold):
+    scores = np.array([b[4] for b in boxes])
+    boxes = np.array([(b[0], b[1], b[2], b[3]) for b in boxes])
+
+    # Sort the scores in descending order
+    sorted_indices = np.argsort(scores)[::-1]
+    sorted_boxes = boxes[sorted_indices]
+    sorted_scores = scores[sorted_indices]
+
+    selected_boxes = []
+    while len(sorted_boxes) > 0:
+        # Select the box with the highest score
+        best_box = sorted_boxes[0]
+        selected_boxes.append(best_box)
+
+        iou = calculate_iou(best_box, sorted_boxes)
+
+        overlapping_indices = np.where(iou > threshold)[0]
+        sorted_boxes = np.delete(sorted_boxes, overlapping_indices, axis=0)
+        sorted_scores = np.delete(sorted_scores, overlapping_indices)
+
+    return selected_boxes
+
+
