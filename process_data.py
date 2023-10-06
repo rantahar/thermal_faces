@@ -47,8 +47,6 @@ def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_frac
             file_path = os.path.join(data_path, file_name)
             if video_name in data:
                 data[video_name].append((frame_index, array, json_data["labels"]))
-                if len(data[video_name]) > 3:
-                    break
             else:
                 data[video_name] = [
                     (frame_index, array, json_data["labels"]),
