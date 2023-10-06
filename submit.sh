@@ -7,5 +7,5 @@
 module load miniconda cuda
 source activate thermal
 
-python ./subsections.py --units=16
+python ./subsections.py --units=64 --negatives=5
 

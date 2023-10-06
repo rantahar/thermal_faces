@@ -17,14 +17,14 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 @click.command()
 @click.option("--units", default=32, help="Hidden units after the first layer. Used to rescale the model.")
 @click.option("--region_size", default=32, help="The size of the training images (generate using process_data.py)")
-@click.option("--num_epochs", default=50, help="Number of epochs to run")
-@click.option("--save_every", default=1000, help="Number of epochs between saving the model")
+@click.option("--num_epochs", default=1000, help="Number of epochs to run")
+@click.option("--save_every", default=50, help="Number of epochs between saving the model")
 @click.option("--batch_size", default=100, help="Size of the training batches")
 @click.option("--learning_rate", default=1e-5, help="Optimization step size")
 @click.option("--negatives", default=1, help="Number of negative examples for each positive")
 def train_subsection_model(units, region_size, num_epochs, save_every, batch_size, learning_rate, negatives):
 
-    save_path = f"saved/reduction_model_{units}_{region_size}"
+    save_path = f"saved/reduction_model_{units}_{region_size}_{negatives}"
 
     if not os.path.exists("saved"):
         os.makedirs("saved")
@@ -68,7 +68,7 @@ def train_subsection_model(units, region_size, num_epochs, save_every, batch_siz
             train_accuracy += nn.functional.sigmoid(positive_predictions).mean().item()
             predictions = nn.functional.sigmoid(positive_predictions).detach()
 
-            for i in range(negatives_per_positive):
+            for i in range(negatives):
                 negative_data = next(negative_train_data)
                 negative_predictions = faceDetector(negative_data)
                 loss += loss_function(negative_predictions, torch.zeros_like(negative_predictions))
