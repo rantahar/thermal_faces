@@ -91,7 +91,7 @@ def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_frac
                 continue
             
             regions = extract_rescaled_subregions(
-                array, labels, [32, 48, 64], step_fraction
+                array, labels, region_sizes, step_fraction
             )
             for region in regions:
                 if region[1]:
@@ -108,7 +108,7 @@ def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_frac
                 continue
             
             regions = extract_rescaled_subregions(
-                array, labels, [32, 48, 64], step_fraction
+                array, labels, region_sizes, step_fraction
             )
             for region in regions:
                 if region[1]:
