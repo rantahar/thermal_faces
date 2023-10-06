@@ -112,8 +112,7 @@ def train_subsection_model(units, region_size, num_epochs, save_every, learning_
             print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}", flush=True)
 
 
-        if epoch%(save_every+1) == 0:
-            model_state = faceDetector.state_dict()
+        if (epoch+1)%save_every == 0:
             torch.save(
                 {
                     'model_state_dict': faceDetector.state_dict(),
