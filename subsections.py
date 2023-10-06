@@ -4,16 +4,17 @@ import json
 import torch
 import torch.nn as nn
 import time
-import random
 import itertools
 
-from subsection_utils import extract_subregions, plot_boxes_on_image
+from subsection_utils import plot_boxes_on_image
 from reduce_model import FaceDetector
 
+# Region size of the regions after rescaling. By default, regions are rescaled
+# to the smallest region size
 batch_size = 200
 learning_rate = 1e-5
 negatives_per_positive = 1
-region_size = 48
+region_size = 32 
 save_every = 100
 num_epochs = 2001
 units = 16
