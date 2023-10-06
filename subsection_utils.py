@@ -23,7 +23,7 @@ def extract_subregions(array, labels=None, height=32, width=32, step_fraction=0.
             min_x = x+width*0.4
             min_y = y+height*0.3
             max_x = x+width*0.6
-            max_y = y+height*0.5
+            max_y = y+height*0.6
             if labels is not None:
                 contains_label = any(
                     label["x"] >= min_x and label["x"] < max_x and
@@ -41,19 +41,19 @@ def extract_rescaled_subregions(image, labels, sizes, step_fraction=0.5):
     subregions = []
     smallest_size = min(sizes)
     
+    resized_subregions = []
     for size in sizes:
         subregions += (extract_subregions(image, labels, size, size, step_fraction))
     
-    # Resize all subregions to the smallest size
-    resized_subregions = []
-    for subregion, label, x, y in subregions:
-        resized_subregion = cv2.resize(subregion, (smallest_size, smallest_size))
-        resized_subregions.append((resized_subregion, label, x, y))
+        # Resize each subregion
+        for subregion, label, x, y in subregions:
+            resized_subregion = cv2.resize(subregion, (smallest_size, smallest_size))
+            resized_subregions.append((resized_subregion, label, x, y, size))
     
     return resized_subregions
 
 
-def plot_boxes_on_image(image, boxes):
+def plot_boxes_on_image(image, boxes, labels = True):
     _, ax = plt.subplots(1)
     ax.imshow(image, cmap='gray')
     
@@ -64,7 +64,8 @@ def plot_boxes_on_image(image, boxes):
         )
         ax.add_patch(rect)
         
-        ax.text(box[0], box[1], f'{box[4]:.2f}', bbox=dict(facecolor='white', alpha=0.2, edgecolor='none'))
+        if labels:
+            ax.text(box[0], box[1], f'{box[4]:.2f}', bbox=dict(facecolor='white', alpha=0.2, edgecolor='none'))
 
 
 
