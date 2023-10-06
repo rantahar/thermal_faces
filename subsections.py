@@ -6,7 +6,6 @@ import torch.nn as nn
 import time
 import itertools
 
-from subsection_utils import plot_boxes_on_image
 from reduce_model import FaceDetector
 
 # Region size of the regions after rescaling. By default, regions are rescaled
