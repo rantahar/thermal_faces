@@ -3,3 +3,4 @@ torch
 matplotlib
 scipy
 opencv-python
+click
