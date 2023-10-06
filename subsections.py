@@ -1,13 +1,11 @@
 import os
 import click
-import numpy as np
 import json
 import torch
 import torch.nn as nn
 import time
 import itertools
 
-from subsection_utils import plot_boxes_on_image
 from reduce_model import FaceDetector
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -19,10 +17,9 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 @click.option("--region_size", default=32, help="The size of the training images (generate using process_data.py)")
 @click.option("--num_epochs", default=1000, help="Number of epochs to run")
 @click.option("--save_every", default=50, help="Number of epochs between saving the model")
-@click.option("--batch_size", default=100, help="Size of the training batches")
 @click.option("--learning_rate", default=1e-5, help="Optimization step size")
 @click.option("--negatives", default=1, help="Number of negative examples for each positive")
-def train_subsection_model(units, region_size, num_epochs, save_every, batch_size, learning_rate, negatives):
+def train_subsection_model(units, region_size, num_epochs, save_every, learning_rate, negatives):
 
     save_path = f"saved/reduction_model_{units}_{region_size}_{negatives}"
 

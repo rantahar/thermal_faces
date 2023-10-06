@@ -1,66 +1,58 @@
 import sys
+import click
 import torch
-import json
 import numpy as np
-from subsection_utils import extract_subregions, plot_boxes_on_image, non_max_suppression
+from subsection_utils import plot_boxes_on_image, non_max_suppression
+import cv2
+import time
+
 from reduce_model import FaceDetector
 
 
-threshold = 0.9
-units = 16
-region_size = 64
-step_fraction = 0.2
-input_image = "data/train_data/Pilot2_MagicFlute_Part1_18500.npy"
-if len(sys.argv) > 1:
-    path_to_model = sys.argv[1]
-else:
-    path_to_model = f"saved/reduction_model_6_{units}_1000"
+@click.command()
+@click.option("--threshold", default=0.99, help="Threshold for detecting a face in a bounding box.")
+@click.option("--region_sizes", default=[32,48,64], help="Size of the bounding box.", multiple=True)
+@click.option("--step_fraction", default=0.2, help="Step between bounding boxes as a fraction of its size.")
+@click.option("--image_file", help="Path to an image file.", required=True)
+@click.option("--model_file", help="Path to the model file.", required=True)
+def apply_to_frame(threshold, region_sizes, step_fraction, image_file, model_file):
+    # Load the model from disk
+    model_dict = torch.load(
+        model_file,
+        map_location=torch.device('cpu')
+    )
+    units = model_dict.get("units")
+    region_size = model_dict.get("region_size")
 
-# Load the model from disk
-model_dict = torch.load(
-    path_to_model,
-    map_location=torch.device('cpu')
-)
-units = model_dict.get("units", units)
-region_size = model_dict.get("region_size", region_size)
+    model = FaceDetector(region_size, region_size, units)
+    model.load_state_dict(model_dict['model_state_dict'])
+    model.eval()
 
-model = FaceDetector(region_size, region_size, units)
-model.load_state_dict(model_dict['model_state_dict'])
-model.eval()
+    # Load temperature values and process
+    image = np.load(image_file).astype(np.float32)
 
-json_file = input_image.replace(".npy",".json")
+    boxes = []
+    height, width = image.shape
+    for size in region_sizes:
+        start_time = time.time()
+        step_size = int(size*step_fraction)
+        for y in range(0, height - size + 1, step_size):
+            for x in range(0, width - size + 1, step_size):
+                subregion = np.array(image[y:y+size, x:x+size])
+                subregion = cv2.resize(subregion, (region_size, region_size))
+                tensor = torch.tensor(subregion).unsqueeze(0)
+                score = model(tensor).squeeze(0).item()
+                if score > threshold:
+                    boxes.append((x, y, size, size, score))
 
-# Load and preprocess the temperature values
-image = np.load(input_image).astype(np.float32)
-with open(json_file, 'r') as f:
-    json_data = json.load(f)
+        print(f"Size {size} sections processed in: {time.time() - start_time:.2f}s")
 
 
-# Load and preprocess the temperature values
-image = np.load(input_image).astype(np.float32)
-regions = extract_subregions(image, json_data["labels"], region_size, region_size, step_fraction)
-arrays = [r[0] for r in regions]
-labels = [r[1] for r in regions]
+    boxes = non_max_suppression(boxes, 0.1)
 
-with torch.no_grad():
-    tensor = torch.tensor(arrays)
-    predictions = model(tensor).squeeze(0).numpy()
-
-print(predictions.max())
-
-# First apply treshold to remove most of the boxes
-boxes = []
-threshold = threshold * predictions.max()
-for i in range(len(regions)):
-    array, _, x, y = regions[i]
-    output = predictions[i]
-
-    if output > threshold:
-        boxes.append((x, y, region_size, region_size, output))
-    
-boxes = non_max_suppression(boxes, 0.05)
-
-plot_boxes_on_image(image, boxes)
+    plot_boxes_on_image(image, boxes)
 
 
 
+if __name__ == '__main__':
+    apply_to_frame()
