@@ -50,8 +50,6 @@ def load_npy_files(folder_path, validation_fraction=0.1):
             file_path = os.path.join(folder_path, file_name)
             if video_name in data:
                 data[video_name].append((frame_index, array, json_data["labels"]))
-                if len(data[video_name]) > 5:
-                    break
             else:
                 data[video_name] = [
                     (frame_index, array, json_data["labels"]),
