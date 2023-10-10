@@ -10,7 +10,7 @@ from reduce_model import FaceDetector
 
 
 @click.command()
-@click.option("--threshold", default=0.99, help="Threshold for detecting a face in a bounding box.")
+@click.option("--threshold", default=0, help="Threshold for detecting a face in a bounding box.")
 @click.option("--region_sizes", default=[32,48,64], help="Size of the bounding box.", multiple=True)
 @click.option("--step_fraction", default=0.2, help="Step between bounding boxes as a fraction of its size.")
 @click.option("--image_file", help="Path to an image file.", required=True)
@@ -26,24 +26,26 @@ def apply_to_frame(threshold, region_sizes, step_fraction, image_file, model_fil
 
     model = FaceDetector(region_size, region_size, units)
     model.load_state_dict(model_dict['model_state_dict'])
-    model.eval()
+    model.train()
 
     # Load temperature values and process
     image = np.load(image_file).astype(np.float32)
 
     boxes = []
-    height, width = image.shape
     for size in region_sizes:
         start_time = time.time()
-        step_size = int(size*step_fraction)
-        for y in range(0, height - size + 1, step_size):
-            for x in range(0, width - size + 1, step_size):
-                subregion = np.array(image[y:y+size, x:x+size])
-                subregion = cv2.resize(subregion, (region_size, region_size))
+        scaled_x = int(image.shape[1]*region_size/size)
+        scaled_y = int(image.shape[0]*region_size/size)
+        resized = cv2.resize(image, (scaled_x, scaled_y))
+        height, width = resized.shape
+        step_size = int(region_size*step_fraction)
+        for y in range(0, height - region_size + 1, step_size):
+            for x in range(0, width - region_size + 1, step_size):
+                subregion = np.array(resized[y:y+region_size, x:x+region_size])
                 tensor = torch.tensor(subregion).unsqueeze(0)
                 score = model(tensor).squeeze(0).item()
                 if score > threshold:
-                    boxes.append((x, y, size, size, score))
+                    boxes.append((x*size/region_size, y*size/region_size, size, size, score))
 
         print(f"Size {size} sections processed in: {time.time() - start_time:.2f}s")
 

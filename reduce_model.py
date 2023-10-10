@@ -25,6 +25,8 @@ class FaceDetector(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, temperatures):
+        assert(temperatures.shape[1] == self.image_height)
+        assert(temperatures.shape[2] == self.image_width)
         temperatures = temperatures.unsqueeze(1)
         out = temperatures/40
 
