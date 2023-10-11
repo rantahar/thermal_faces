@@ -1,4 +1,3 @@
-import sys
 import click
 import torch
 import numpy as np
