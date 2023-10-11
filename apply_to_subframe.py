@@ -1,11 +1,8 @@
 import click
 import torch
 import numpy as np
-from subsection_utils import plot_boxes_on_image, non_max_suppression
-import cv2
-import time
-
-from reduce_model import FaceDetector
+from thermal_face_detector.subsection_utils import plot_boxes_on_image, non_max_suppression, apply_to_matrix
+from thermal_face_detector.reduce_model import FaceDetector
 
 
 @click.command()
@@ -30,25 +27,26 @@ def apply_to_frame(threshold, region_sizes, step_fraction, image_file, model_fil
     # Load temperature values and process
     image = np.load(image_file).astype(np.float32)
 
+    regions_of_interest = apply_to_matrix(model, image, [64], 0.2)
+    regions_of_interest = [b for b in regions_of_interest if b[4] > 0]
+    regions_of_interest = non_max_suppression(regions_of_interest, 0)
+    plot_boxes_on_image(image, regions_of_interest)
+
     boxes = []
-    for size in region_sizes:
-        start_time = time.time()
-        scaled_x = int(image.shape[1]*region_size/size)
-        scaled_y = int(image.shape[0]*region_size/size)
-        resized = cv2.resize(image, (scaled_x, scaled_y))
-        height, width = resized.shape
-        step_size = int(region_size*step_fraction)
-        for y in range(0, height - region_size + 1, step_size):
-            for x in range(0, width - region_size + 1, step_size):
-                subregion = np.array(resized[y:y+region_size, x:x+region_size])
-                tensor = torch.tensor(subregion).unsqueeze(0)
-                score = model(tensor).squeeze(0).item()
-                if score > threshold:
-                    boxes.append((x*size/region_size, y*size/region_size, size, size, score))
-
-        print(f"Size {size} sections processed in: {time.time() - start_time:.2f}s")
-
-
+    for region in regions_of_interest:
+        x1 = max(0, int(region[0]) - 32)
+        x2 = min(image.shape[1], int(region[0]) + 64 + 32)
+        y1 = max(0, int(region[1]) - 32)
+        y2 = min(image.shape[0], int(region[1]) + 64 + 32)
+        region_image = np.array(image[y1:y2, x1:x2])
+        region_boxes = apply_to_matrix(model, region_image, region_sizes, step_fraction)
+        region_boxes = [
+            (b[0] + x1, b[1] + y1, b[2], b[3], b[4])
+            for b in region_boxes if b[4] > threshold
+        ]
+        boxes += non_max_suppression(region_boxes, 0.1)
+        #plot_boxes_on_image(image, boxes)
+        
     boxes = non_max_suppression(boxes, 0.1)
 
     plot_boxes_on_image(image, boxes)

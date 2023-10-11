@@ -4,3 +4,4 @@ matplotlib
 scipy
 opencv-python
 click
+git+https://github.com/rantahar/seq_file

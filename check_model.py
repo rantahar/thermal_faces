@@ -1,6 +1,6 @@
 import sys
 import torch
-from reduce_model import FaceDetector
+from thermal_faces.reduce_model import FaceDetector
 
 path_to_model = sys.argv[1]
 

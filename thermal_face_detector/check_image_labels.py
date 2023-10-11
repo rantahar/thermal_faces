@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from subsection_utils import extract_rescaled_subregions, plot_boxes_on_image
+from thermal_face_detector.subsection_utils import extract_rescaled_subregions, plot_boxes_on_image
 
 region_sizes = [32, 48, 64]
 step_fraction = 0.2

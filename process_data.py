@@ -5,7 +5,7 @@ import torch
 import random
 import click
 
-from subsection_utils import extract_rescaled_subregions
+from thermal_faces.subsection_utils import extract_rescaled_subregions
 
 
 

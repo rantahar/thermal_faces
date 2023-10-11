@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 import cv2
+import time
+import torch
 
 
 def display_image(temperature_image):
@@ -113,3 +115,23 @@ def non_max_suppression(boxes, threshold):
     return selected_boxes
 
 
+def apply_to_matrix(model, matrix, sizes, step_fraction):
+    region_size = model.image_width
+    boxes = []
+    for size in sizes:
+        start_time = time.time()
+        scaled_x = int(matrix.shape[1]*region_size/size)
+        scaled_y = int(matrix.shape[0]*region_size/size)
+        resized = cv2.resize(matrix, (scaled_x, scaled_y))
+        height, width = resized.shape
+        step_size = int(region_size*step_fraction)
+        for y in range(0, height - region_size + 1, step_size):
+            for x in range(0, width - region_size + 1, step_size):
+                subregion = np.array(resized[y:y+region_size, x:x+region_size])
+                tensor = torch.tensor(subregion).unsqueeze(0)
+                score = model(tensor).squeeze(0).item()
+                boxes.append((x*size/region_size, y*size/region_size, size, size, score))
+
+        print(f"Size {size} sections processed in: {time.time() - start_time:.2f}s")
+    
+    return boxes
