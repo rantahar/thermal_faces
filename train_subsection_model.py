@@ -6,7 +6,7 @@ import torch.nn as nn
 import time
 import itertools
 
-from thermal_faces.reduce_model import FaceDetector
+from thermal_face_detector.reduce_model import FaceDetector
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
