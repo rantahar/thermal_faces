@@ -119,7 +119,7 @@ def apply_to_matrix(model, matrix, sizes, step_fraction):
     region_size = model.image_width
     boxes = []
     for size in sizes:
-        start_time = time.time()
+        #start_time = time.time()
         scaled_x = int(matrix.shape[1]*region_size/size)
         scaled_y = int(matrix.shape[0]*region_size/size)
         resized = cv2.resize(matrix, (scaled_x, scaled_y))
@@ -132,6 +132,35 @@ def apply_to_matrix(model, matrix, sizes, step_fraction):
                 score = model(tensor).squeeze(0).item()
                 boxes.append((x*size/region_size, y*size/region_size, size, size, score))
 
-        print(f"Size {size} sections processed in: {time.time() - start_time:.2f}s")
+        #print(f"Size {size} sections processed in: {time.time() - start_time:.2f}s")
     
+    return boxes
+
+
+def scan_and_apply(model, matrix, sizes, step_fraction, threshold, scan_size = None, scan_margin = None, scan_step = 0.3, max_overlap = 0.1):
+    if scan_size is None:
+        scan_size = max(sizes)
+    if scan_margin is None:
+        scan_margin = scan_size//2
+
+    regions_of_interest = apply_to_matrix(model, matrix, [scan_size], scan_step)
+    regions_of_interest = [b for b in regions_of_interest if b[4] > 0]
+    regions_of_interest = non_max_suppression(regions_of_interest, 0)
+    plot_boxes_on_image(matrix, regions_of_interest)
+
+    boxes = []
+    for region in regions_of_interest:
+        x1 = max(0, int(region[0]) - scan_margin)
+        x2 = min(matrix.shape[1], int(region[0]) + scan_size + scan_margin)
+        y1 = max(0, int(region[1]) - scan_margin)
+        y2 = min(matrix.shape[0], int(region[1]) + scan_size + scan_margin)
+        region_image = np.array(matrix[y1:y2, x1:x2])
+        region_boxes = apply_to_matrix(model, region_image, sizes, step_fraction)
+        region_boxes = [
+            (b[0] + x1, b[1] + y1, b[2], b[3], b[4])
+            for b in region_boxes if b[4] > threshold
+        ]
+        boxes += non_max_suppression(region_boxes, max_overlap)
+        
+    boxes = non_max_suppression(boxes, max_overlap)
     return boxes
