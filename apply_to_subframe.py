@@ -1,9 +1,9 @@
 import click
 import torch
+import time
 import numpy as np
-from thermal_face_detector.subsection_utils import plot_boxes_on_image, non_max_suppression, scan_and_apply
+from thermal_face_detector.subsection_utils import plot_boxes_on_image, scan_and_apply
 from thermal_face_detector.reduce_model import FaceDetector
-
 
 @click.command()
 @click.option("--threshold", default=0, help="Threshold for detecting a face in a bounding box.")
@@ -27,7 +27,9 @@ def apply_to_frame(threshold, region_sizes, step_fraction, image_file, model_fil
     # Load temperature values and process
     image = np.load(image_file).astype(np.float32)
 
+    start_time = time.time()
     boxes = scan_and_apply(model, image, region_sizes, step_fraction, threshold, max_overlap = 0.1)
+    print(time.time() - start_time)
     plot_boxes_on_image(image, boxes)
 
 

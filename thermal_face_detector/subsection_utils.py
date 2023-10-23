@@ -137,23 +137,17 @@ def apply_to_matrix(model, matrix, sizes, step_fraction):
     return boxes
 
 
-def scan_and_apply(model, matrix, sizes, step_fraction, threshold, scan_size = None, scan_margin = None, scan_step = 0.3, max_overlap = 0.1):
-    if scan_size is None:
-        scan_size = max(sizes)
-    if scan_margin is None:
-        scan_margin = scan_size//2
-
-    regions_of_interest = apply_to_matrix(model, matrix, [scan_size], scan_step)
-    regions_of_interest = [b for b in regions_of_interest if b[4] > 0]
-    regions_of_interest = non_max_suppression(regions_of_interest, 0)
-    plot_boxes_on_image(matrix, regions_of_interest)
+def apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions, margin=16, max_overlap = 0.1):
+    regions = non_max_suppression(regions, 0)
+    print("r", len(regions))
 
     boxes = []
-    for region in regions_of_interest:
-        x1 = max(0, int(region[0]) - scan_margin)
-        x2 = min(matrix.shape[1], int(region[0]) + scan_size + scan_margin)
-        y1 = max(0, int(region[1]) - scan_margin)
-        y2 = min(matrix.shape[0], int(region[1]) + scan_size + scan_margin)
+    for region in regions:
+        size = region[2]
+        x1 = int(max(0, int(region[0]) - margin))
+        x2 = int(min(matrix.shape[1], int(region[0]) + size + margin))
+        y1 = int(max(0, int(region[1]) - margin))
+        y2 = int(min(matrix.shape[0], int(region[1]) + size + margin))
         region_image = np.array(matrix[y1:y2, x1:x2])
         region_boxes = apply_to_matrix(model, region_image, sizes, step_fraction)
         region_boxes = [
@@ -161,6 +155,29 @@ def scan_and_apply(model, matrix, sizes, step_fraction, threshold, scan_size = N
             for b in region_boxes if b[4] > threshold
         ]
         boxes += non_max_suppression(region_boxes, max_overlap)
-        
+
     boxes = non_max_suppression(boxes, max_overlap)
     return boxes
+
+
+def scan_matrix(model, matrix, scan_size, scan_margin = None, scan_step = 0.3):
+    if scan_margin is None:
+        scan_margin = scan_size//8
+
+    regions_of_interest = apply_to_matrix(model, matrix, [scan_size], scan_step)
+    regions_of_interest = [b for b in regions_of_interest if b[4] > 0]
+    regions_of_interest = non_max_suppression(regions_of_interest, 0)
+    print(len(regions_of_interest))
+
+    return regions_of_interest
+
+
+def scan_and_apply(model, matrix, sizes, step_fraction, threshold, scan_size = None, scan_margin = 8, scan_step = 0.3, max_overlap = 0.1):
+    if scan_size is None:
+        scan_size = max(sizes)
+
+    regions_of_interest = scan_matrix(model, matrix, scan_size, scan_margin, scan_step)
+    boxes = apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions_of_interest, scan_margin, max_overlap)
+
+    return boxes
+

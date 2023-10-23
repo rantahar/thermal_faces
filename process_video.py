@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 from thermal_faces.seq_reader import extract_metadata, convert_to_temperature, seq_frames
-from thermal_face_detector.subsection_utils import plot_boxes_on_image, non_max_suppression, apply_to_matrix
+from thermal_face_detector.subsection_utils import plot_boxes_on_image, non_max_suppression, apply_to_regions, scan_matrix
 from thermal_face_detector.reduce_model import FaceDetector
 
 
@@ -34,19 +34,21 @@ def run(threshold, region_sizes, step_fraction, video_file, model_file):
     frame_size = width * height * (bitdepth // 8)
 
     print(frame_size)
-    
+
     # Process the frames
+    boxes = []
     for frame_index, frame in enumerate(seq_frames(video_file)):
         raw_data = np.frombuffer(frame[len(frame)-frame_size:], dtype=np.uint16).reshape(height, width).astype(np.float32)
-        temperature = convert_to_temperature(raw_data, metadata)
+        temperature = convert_to_temperature(raw_data, metadata,)
 
+        if frame_index == 0 or (frame_index+1)%100 == 0:
+            boxes += scan_matrix(model, temperature, max(region_sizes), 8)
 
-        boxes = apply_to_matrix(model, temperature, region_sizes, step_fraction)
+        boxes = apply_to_regions(model, temperature, region_sizes, step_fraction, threshold, boxes)
         boxes = [b for b in boxes if b[4] > threshold]
         boxes = non_max_suppression(boxes, 0.1)
-
-
-        plot_boxes_on_image(temperature, boxes)
+        if frame_index == 0 or (frame_index+1)%100 == 0:
+            plot_boxes_on_image(temperature, boxes)
 
 
 if __name__ == '__main__':
