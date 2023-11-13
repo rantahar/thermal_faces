@@ -5,9 +5,7 @@ import torch
 import random
 import click
 
-from thermal_faces.subsection_utils import extract_rescaled_subregions
-
-
+from thermal_face_detector.subsection_utils import extract_rescaled_subregions
 
 
 if not os.path.exists("saved"):
@@ -27,6 +25,29 @@ def batch_data(data, batch_size):
     batches = torch.reshape(data, [-1, batch_size, region_size, region_size])
 
     return batches
+
+
+def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
+    data_positive = []
+    data_negative = []
+
+    for resolution in data:
+        for frame_index, array, json_data in data[resolution]:
+            if len(json_data) == 0:
+                continue
+            
+            regions = extract_rescaled_subregions(
+                array, json_data, region_sizes, step_fraction,
+                require_nose=True, require_forehead=True
+            )
+            for region in regions:
+                if region[1]:
+                    data_positive.append(region[0])
+                else:
+                    if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
+                        data_negative.append(region[0])
+    
+    return data_positive, data_negative
 
 
 def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_fraction, validation_fraction):
@@ -78,44 +99,13 @@ def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_frac
             else:
                 valid_data_by_resolution[resolution] += valid_frames
 
-    train_data_positive = []
-    train_data_negative = []
-    valid_data_positive = []
-    valid_data_negative = []
-
     print("Creating subregions")
-    for resolution in train_data_by_resolution:
-        for frame_index, array, json_data in train_data_by_resolution[resolution]:
-            labels = [l for l in json_data if l['l'] == 1]
-            if len(labels) == 0:
-                continue
-            
-            regions = extract_rescaled_subregions(
-                array, labels, region_sizes, step_fraction
-            )
-            for region in regions:
-                if region[1]:
-                    train_data_positive.append(region[0])
-                else:
-                    if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
-                        train_data_negative.append(region[0])
-
-
-    for resolution in valid_data_by_resolution:
-        for frame_index, array, json_data in valid_data_by_resolution[resolution]:
-            labels = [l for l in json_data if l['l'] == 1]
-            if len(labels) == 0:
-                continue
-            
-            regions = extract_rescaled_subregions(
-                array, labels, region_sizes, step_fraction
-            )
-            for region in regions:
-                if region[1]:
-                    valid_data_positive.append(region[0])
-                else:
-                    if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
-                        valid_data_negative.append(region[0])
+    train_data_positive, train_data_negative = get_subregions_by_label(
+        train_data_by_resolution, region_sizes, step_fraction, keep_fraction
+    )
+    valid_data_positive, valid_data_negative = get_subregions_by_label(
+        valid_data_by_resolution, region_sizes, step_fraction, keep_fraction
+    )
 
 
     print("Creating batches")

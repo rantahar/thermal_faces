@@ -14,38 +14,53 @@ def display_image(temperature_image):
     plt.show()
 
 
-def extract_subregions(array, labels=None, height=32, width=32, step_fraction=0.5):
+def check_label(labels, min_x, min_y, max_x, max_y):
+    contains_label = any(
+        label["x"] >= min_x and label["x"] < max_x and
+        label["y"] >= min_y and label["y"] < max_y
+        for label in labels
+    )
+    return contains_label
+
+def extract_subregions(
+    array, labels=None, height=32, width=32, step_fraction=0.5,
+    require_forehead=True, require_nose=True
+):
     subregions = []
     array_height, array_width = array.shape
     step_size = int(min(height, width) * step_fraction)
 
+    foreheads = [l for l in labels if l['l'] == 1]
+    noses = [l for l in labels if l['l'] == 3]
+
     for y in range(0, array_height - height + 1, step_size):
         for x in range(0, array_width - width + 1, step_size):
             subregion = np.array(array[y:y+height, x:x+width])
-            min_x = x+width*0.4
-            min_y = y+height*0.3
-            max_x = x+width*0.6
-            max_y = y+height*0.6
-            if labels is not None:
-                contains_label = any(
-                    label["x"] >= min_x and label["x"] < max_x and
-                    label["y"] >= min_y and label["y"] < max_y
-                    for label in labels
+            contains_label = True
+            if require_forehead and len(foreheads) > 0:
+                contains_label = contains_label and check_label(
+                    foreheads,x+width*0.2, y+height*0.2, x+width*0.8, y+height*0.5
                 )
-            else:
-                contains_label = None
+            if require_nose and len(noses) > 0:
+                contains_label = contains_label and check_label(
+                    noses,x+width*0.2, y+height*0.5, x+width*0.8, y+height*0.7
+                )
             subregions.append((subregion, contains_label, x, y))
 
     return subregions
 
 
-def extract_rescaled_subregions(image, labels, sizes, step_fraction=0.5):
+def extract_rescaled_subregions(
+    image, labels, sizes, step_fraction=0.5, require_forehead=True, require_nose=True
+):
     subregions = []
     smallest_size = min(sizes)
     
     resized_subregions = []
     for size in sizes:
-        subregions += (extract_subregions(image, labels, size, size, step_fraction))
+        subregions += (extract_subregions(
+            image, labels, size, size, step_fraction, require_forehead, require_nose
+        ))
     
         # Resize each subregion
         for subregion, label, x, y in subregions:
