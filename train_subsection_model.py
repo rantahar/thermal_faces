@@ -19,7 +19,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 @click.option("--save_every", default=50, help="Number of epochs between saving the model")
 @click.option("--learning_rate", default=1e-5, help="Optimization step size")
 @click.option("--negatives", default=1, help="Number of negative examples for each positive")
-def train_subsection_model(units, region_size, num_epochs, save_every, learning_rate, negatives):
+@click.option("--data_path", default=".", help="Path of the input data.")
+def train_subsection_model(
+    units, region_size, num_epochs, save_every, learning_rate, negatives, data_path
+):
 
     save_path = f"saved/reduction_model_{units}_{region_size}_{negatives}"
 
@@ -29,11 +32,10 @@ def train_subsection_model(units, region_size, num_epochs, save_every, learning_
     print("units:", units)
     print("device:", device)
 
-
-    valid_data_positive = torch.load("valid_data_positive.pt")
-    valid_data_negative = torch.load("valid_data_negative.pt")
-    train_data_positive = torch.load("train_data_positive.pt")
-    train_data_negative = torch.load("train_data_negative.pt")
+    valid_data_positive = torch.load(os.path.join(data_path, "valid_data_positive.pt"))
+    valid_data_negative = torch.load(os.path.join(data_path, "valid_data_negative.pt"))
+    train_data_positive = torch.load(os.path.join(data_path, "train_data_positive.pt"))
+    train_data_negative = torch.load(os.path.join(data_path, "train_data_negative.pt"))
     valid_data_positive = valid_data_positive.to(device)
     valid_data_negative = valid_data_negative.to(device)
     train_data_positive = train_data_positive.to(device)
