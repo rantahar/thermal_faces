@@ -69,9 +69,24 @@ def plot_boxes_on_image(image, boxes, labels = True):
         if labels:
             ax.text(box[0], box[1], f'{box[4]:.2f}', bbox=dict(facecolor='white', alpha=0.2, edgecolor='none'))
 
-
-
     plt.show()
+
+
+def box_iou(box1, box2):
+    intersection_x1 = np.maximum(box1[0], box2[0])
+    intersection_y1 = np.maximum(box1[1], box2[1])
+    intersection_x2 = np.minimum(box1[0] + box1[2], box2[0] + box2[2])
+    intersection_y2 = np.minimum(box1[1] + box1[3], box2[1] + box2[3])
+
+    intersection_width = np.maximum(0, intersection_x2 - intersection_x1)
+    intersection_height = np.maximum(0, intersection_y2 - intersection_y1)
+
+    intersection_areas = intersection_width * intersection_height
+    box1_area = box1[2] * box1[3]
+    box2_area = box2[2] * box2[3]
+
+    iou = intersection_areas / (box1_area + box2_area - intersection_areas)
+    return iou
 
 
 def calculate_iou(box1, boxes):
@@ -139,7 +154,6 @@ def apply_to_matrix(model, matrix, sizes, step_fraction):
 
 def apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions, margin=16, max_overlap = 0.1):
     regions = non_max_suppression(regions, 0)
-    print("r", len(regions))
 
     boxes = []
     for region in regions:
@@ -160,14 +174,14 @@ def apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions, ma
     return boxes
 
 
-def scan_matrix(model, matrix, scan_size, scan_margin = None, scan_step = 0.3):
+def scan_matrix(model, matrix, scan_size, scan_margin = None, scan_step = 0.3, threshold = 0):
     if scan_margin is None:
         scan_margin = scan_size//8
 
     regions_of_interest = apply_to_matrix(model, matrix, [scan_size], scan_step)
-    regions_of_interest = [b for b in regions_of_interest if b[4] > 0]
+    regions_of_interest = [b for b in regions_of_interest if b[4] > threshold]
     regions_of_interest = non_max_suppression(regions_of_interest, 0)
-    print(len(regions_of_interest))
+    print(f"{len(regions_of_interest)} potential regions")
 
     return regions_of_interest
 
@@ -180,4 +194,6 @@ def scan_and_apply(model, matrix, sizes, step_fraction, threshold, scan_size = N
     boxes = apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions_of_interest, scan_margin, max_overlap)
 
     return boxes
+
+
 
