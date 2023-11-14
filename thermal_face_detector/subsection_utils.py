@@ -14,6 +14,22 @@ def display_image(temperature_image):
     plt.show()
 
 
+def save_image_with_boxes(temperature_array, boxes, file_path):
+    normalized_img = cv2.normalize(temperature_array, None, 0, 255, cv2.NORM_MINMAX)
+    image = np.uint8(normalized_img)
+    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    for box in boxes:
+        top_left = (int(box[0]), int(box[1]))
+        bottom_right = (int(box[0] + box[2]), int(box[1] + box[3]))
+        image = cv2.rectangle(image, top_left, bottom_right, color=(0, 255, 0), thickness=2)
+
+        score = box[4]
+        score_pos = (int(box[0]), int(box[1] - 10))
+        cv2.putText(image, '{:.2f}'.format(score), score_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
+
+    cv2.imwrite(file_path, image)
+
+
 def check_label(labels, min_x, min_y, max_x, max_y):
     contains_label = any(
         label["x"] >= min_x and label["x"] < max_x and
@@ -167,7 +183,7 @@ def apply_to_matrix(model, matrix, sizes, step_fraction):
     return boxes
 
 
-def apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions, margin=16, max_overlap = 0.1):
+def apply_to_regions(model, matrix, step_fraction, threshold, regions, margin=16, max_overlap = 0.1):
     regions = non_max_suppression(regions, 0)
 
     boxes = []
@@ -178,7 +194,7 @@ def apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions, ma
         y1 = int(max(0, int(region[1]) - margin))
         y2 = int(min(matrix.shape[0], int(region[1]) + size + margin))
         region_image = np.array(matrix[y1:y2, x1:x2])
-        region_boxes = apply_to_matrix(model, region_image, sizes, step_fraction)
+        region_boxes = apply_to_matrix(model, region_image, [size], step_fraction)
         region_boxes = [
             (b[0] + x1, b[1] + y1, b[2], b[3], b[4])
             for b in region_boxes if b[4] > threshold
@@ -197,6 +213,7 @@ def scan_matrix(model, matrix, scan_size, scan_margin = None, scan_step = 0.3, t
     regions_of_interest = [b for b in regions_of_interest if b[4] > threshold]
     regions_of_interest = non_max_suppression(regions_of_interest, 0)
     print(f"{len(regions_of_interest)} potential regions")
+    print(regions_of_interest)
 
     return regions_of_interest
 
@@ -206,7 +223,7 @@ def scan_and_apply(model, matrix, sizes, step_fraction, threshold, scan_size = N
         scan_size = max(sizes)
 
     regions_of_interest = scan_matrix(model, matrix, scan_size, scan_margin, scan_step)
-    boxes = apply_to_regions(model, matrix, sizes, step_fraction, threshold, regions_of_interest, scan_margin, max_overlap)
+    boxes = apply_to_regions(model, matrix, step_fraction, threshold, regions_of_interest, scan_margin, max_overlap)
 
     return boxes
 

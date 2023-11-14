@@ -2,3 +2,8 @@ data
 *.pyc
 saved/*
 slurm-*.out
+frame_images
+*.csv
+*.png
+*.seq
+saved_*

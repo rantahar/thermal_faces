@@ -29,7 +29,7 @@ def apply_to_frame(threshold, region_sizes, step_fraction, image_file, model_fil
 
     start_time = time.time()
     boxes = scan_and_apply(model, image, region_sizes, step_fraction, threshold, max_overlap = 0.1)
-    print(time.time() - start_time)
+    print(f"{time.time() - start_time}s")
     plot_boxes_on_image(image, boxes)
 
 
