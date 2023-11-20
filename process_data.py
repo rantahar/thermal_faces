@@ -38,7 +38,7 @@ def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
             
             regions = extract_rescaled_subregions(
                 array, json_data, region_sizes, step_fraction,
-                require_nose=True, require_forehead=True
+                require_nose=True, require_forehead=False
             )
             for region in regions:
                 if region[1]:

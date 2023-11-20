@@ -20,14 +20,15 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 @click.option("--learning_rate", default=1e-5, help="Optimization step size")
 @click.option("--negatives", default=1, help="Number of negative examples for each positive")
 @click.option("--data_path", default=".", help="Path of the input data.")
+@click.option("--save_path", default="saved", help="Path for saving model checkpoints.")
 def train_subsection_model(
-    units, region_size, num_epochs, save_every, learning_rate, negatives, data_path
+    units, region_size, num_epochs, save_every, learning_rate, negatives, data_path, save_path
 ):
 
-    save_path = f"saved/reduction_model_{units}_{region_size}_{negatives}"
+    save_path = f"{save_path}/reduction_model_{units}_{region_size}_{negatives}"
 
-    if not os.path.exists("saved"):
-        os.makedirs("saved")
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
 
     print("units:", units)
     print("device:", device)
@@ -53,7 +54,7 @@ def train_subsection_model(
     negative_train_data = itertools.cycle(train_data_negative)
 
 
-    for epoch in range(num_epochs):
+    for epoch in range(1,num_epochs+1):
         faceDetector.train()
         batches = 0
         train_loss = 0
@@ -114,7 +115,7 @@ def train_subsection_model(
             print(f"Validation: Loss = {validation_loss}, Accuracy = {validation_accuracy}", flush=True)
 
 
-        if (epoch+1)%save_every == 0:
+        if epoch%save_every == 0:
             torch.save(
                 {
                     'model_state_dict': faceDetector.state_dict(),
@@ -122,9 +123,9 @@ def train_subsection_model(
                     'units': units,
                     'region_size': region_size
                 },
-                f"{save_path}_{epoch}"
+                f"{save_path}/{epoch}"
             )
-            with open(f"{save_path}_{epoch}.json", 'w') as f:
+            with open(f"{save_path}/{epoch}.json", 'w') as f:
                 json.dump({
                     'epoch': epoch,
                     "train_loss": train_loss,
