@@ -88,7 +88,7 @@ def extract_rescaled_subregions(
 
 
 def extract_training_data_with_nose(
-    image, labels, sizes, require_forehead=True
+    image, labels, sizes, negatives, require_forehead=True
 ):
     ''' Extracts regions around each labeled nose (label == 3)
     and optionally checks a forehead (label == 1) label exists in
@@ -98,9 +98,9 @@ def extract_training_data_with_nose(
 
     noses = [l for l in labels if l['l'] == 3]
     foreheads = [l for l in labels if l['l'] == 1]
-    for size in sizes:
-        n_positives = 0
-        for nose in noses:
+    for nose in noses:
+        found = False
+        for size in sorted(sizes):
             x, y = nose['x'], nose['y']
             min_x, min_y = x-size//2, y - size//2
             max_x, max_y = x+size//2, y + size//2
@@ -111,18 +111,27 @@ def extract_training_data_with_nose(
             subregion = cv2.resize(subregion, (smallest_size, smallest_size))
             if require_forehead:
                 contains_label = check_label(
-                    foreheads,x-size*0.2, y-size*0.4, x+size*0.2, y-size*0.3
+                    foreheads,x-size*0.2, y-size*0.4, x+size*0.2, y-size*0.1
+                )
+                # Containing another nose in addition to the forehead disqualifies
+                # the image
+                contains_label = contains_label and not check_label(
+                    noses,x-size*0.45, y-size*0.45, x+size*0.45, y-size*0
                 )
                 if contains_label:
                     subregions.append((
                         subregion, True, min_x, min_y, size
                     ))
-                    n_positives += 1
+                    found = True
             else:
                 subregions.append((subregion, True, min_x, min_y, size))
-                n_positives += 1
+                found = True
 
-        for i in range(0, n_positives*5):
+            if found:
+                break
+        
+    for i in range(0, len(subregions)*negatives):
+        for size in sorted(sizes):
             # Generate random negative subregions
             x = np.random.randint(image.shape[1])
             y = np.random.randint(image.shape[0])
