@@ -43,7 +43,6 @@ def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
                 if region[1]:
                     data_positive.append(region[0])
                 else:
-                    #if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
                     data_negative.append(region[0])
     
     return data_positive, data_negative
