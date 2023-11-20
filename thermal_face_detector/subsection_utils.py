@@ -111,12 +111,12 @@ def extract_training_data_with_nose(
             subregion = cv2.resize(subregion, (smallest_size, smallest_size))
             if require_forehead:
                 contains_label = check_label(
-                    foreheads,x-size*0.2, y-size*0.4, x+size*0.2, y-size*0.1
+                    foreheads, x-size*0.2, y-size*0.4, x+size*0.2, y-size*0.1
                 )
                 # Containing another nose in addition to the forehead disqualifies
                 # the image
                 contains_label = contains_label and not check_label(
-                    noses,x-size*0.45, y-size*0.45, x+size*0.45, y-size*0
+                    noses, x-size*0.45, y-size*0.45, x+size*0.45, y-size*0
                 )
                 if contains_label:
                     subregions.append((
@@ -125,7 +125,6 @@ def extract_training_data_with_nose(
                     found = True
             else:
                 subregions.append((subregion, True, min_x, min_y, size))
-                found = True
 
             if found:
                 break
