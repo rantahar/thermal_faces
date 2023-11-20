@@ -5,7 +5,7 @@ import torch
 import random
 import click
 
-from thermal_face_detector.subsection_utils import extract_rescaled_subregions
+from thermal_face_detector.subsection_utils import extract_training_data_with_nose
 
 
 if not os.path.exists("saved"):
@@ -36,16 +36,15 @@ def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
             if len(json_data) == 0:
                 continue
             
-            regions = extract_rescaled_subregions(
-                array, json_data, region_sizes, step_fraction,
-                require_nose=True, require_forehead=True
+            regions = extract_training_data_with_nose(
+                array, json_data, region_sizes, require_forehead=True
             )
             for region in regions:
                 if region[1]:
                     data_positive.append(region[0])
                 else:
-                    if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
-                        data_negative.append(region[0])
+                    #if np.random.choice([True, False], 1, p=[keep_fraction,1-keep_fraction]):
+                    data_negative.append(region[0])
     
     return data_positive, data_negative
 

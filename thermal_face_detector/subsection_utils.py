@@ -67,7 +67,8 @@ def extract_subregions(
 
 
 def extract_rescaled_subregions(
-    image, labels, sizes, step_fraction=0.5, require_forehead=True, require_nose=True
+    image, labels, sizes, step_fraction=0.5, require_forehead=True,
+    require_nose=True
 ):
     subregions = []
     smallest_size = min(sizes)
@@ -84,6 +85,54 @@ def extract_rescaled_subregions(
             resized_subregions.append((resized_subregion, label, x, y, size))
     
     return resized_subregions
+
+
+def extract_training_data_with_nose(
+    image, labels, sizes, require_forehead=True
+):
+    ''' Extracts regions around each labeled nose (label == 3)
+    and optionally checks a forehead (label == 1) label exists in
+    a region above the nose.'''
+    subregions = []
+    smallest_size = min(sizes)
+
+    noses = [l for l in labels if l['l'] == 3]
+    foreheads = [l for l in labels if l['l'] == 1]
+    for size in sizes:
+        n_positives = 0
+        for nose in noses:
+            x, y = nose['x'], nose['y']
+            min_x, min_y = x-size//2, y - size//2
+            max_x, max_y = x+size//2, y + size//2
+            subregion = np.array(image[min_y:max_y, min_x:max_x])
+            if subregion.shape[0] < 0.9*size or subregion.shape[1] < 0.9*size:
+                continue
+
+            subregion = cv2.resize(subregion, (smallest_size, smallest_size))
+            if require_forehead:
+                contains_label = check_label(
+                    foreheads,x-size*0.2, y-size*0.4, x+size*0.2, y-size*0.3
+                )
+                if contains_label:
+                    subregions.append((
+                        subregion, True, min_x, min_y, size
+                    ))
+                    n_positives += 1
+            else:
+                subregions.append((subregion, True, min_x, min_y, size))
+                n_positives += 1
+
+        for i in range(0, n_positives*5):
+            # Generate random negative subregions
+            x = np.random.randint(image.shape[1])
+            y = np.random.randint(image.shape[0])
+            subregion = np.array(image[y:y+size, x:x+size])
+            
+            subregion = cv2.resize(subregion, (smallest_size, smallest_size))
+            subregions.append((subregion, False, min_x, min_y, size))
+            # Check that the data is actually negative?
+
+    return subregions
 
 
 def plot_boxes_on_image(image, boxes, labels = True):
@@ -183,16 +232,20 @@ def apply_to_matrix(model, matrix, sizes, step_fraction):
     return boxes
 
 
-def apply_to_regions(model, matrix, step_fraction, threshold, regions, margin=16, max_overlap = 0.1):
+def apply_to_regions(model, matrix, step_fraction, threshold, regions, margin=0.25, max_overlap = 0.1):
     regions = non_max_suppression(regions, 0)
 
     boxes = []
     for region in regions:
         size = region[2]
-        x1 = int(max(0, int(region[0]) - margin))
-        x2 = int(min(matrix.shape[1], int(region[0]) + size + margin))
-        y1 = int(max(0, int(region[1]) - margin))
-        y2 = int(min(matrix.shape[0], int(region[1]) + size + margin))
+        if margin < 1 and margin > 0:
+            region_margin = int(size*margin)
+        else:
+            region_margin = margin
+        x1 = int(max(0, int(region[0]) - region_margin))
+        x2 = int(min(matrix.shape[1], int(region[0]) + size + region_margin))
+        y1 = int(max(0, int(region[1]) - region_margin))
+        y2 = int(min(matrix.shape[0], int(region[1]) + size + region_margin))
         region_image = np.array(matrix[y1:y2, x1:x2])
         region_boxes = apply_to_matrix(model, region_image, [size], step_fraction)
         region_boxes = [
