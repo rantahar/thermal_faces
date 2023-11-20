@@ -6,5 +6,5 @@
 module load miniconda cuda
 source activate thermal
 
-python ./process_data.py
+python ./process_data.py --data_path=data/train_data/
 
