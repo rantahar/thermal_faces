@@ -27,7 +27,7 @@ def batch_data(data, batch_size):
     return batches
 
 
-def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
+def get_subregions_by_label(data, region_sizes, negatives):
     data_positive = []
     data_negative = []
 
@@ -37,7 +37,7 @@ def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
                 continue
             
             regions = extract_training_data_with_nose(
-                array, json_data, region_sizes, require_forehead=True
+                array, json_data, region_sizes, negatives, require_forehead=True
             )
             for region in regions:
                 if region[1]:
@@ -48,7 +48,7 @@ def get_subregions_by_label(data, region_sizes, step_fraction, keep_fraction):
     return data_positive, data_negative
 
 
-def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_fraction, validation_fraction):
+def load_npy_files(data_path, batch_size, region_sizes, negatives, validation_fraction):
     data = {}
     
     for file_name in os.listdir(data_path):
@@ -99,10 +99,10 @@ def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_frac
 
     print("Creating subregions")
     train_data_positive, train_data_negative = get_subregions_by_label(
-        train_data_by_resolution, region_sizes, step_fraction, keep_fraction
+        train_data_by_resolution, region_sizes, negatives
     )
     valid_data_positive, valid_data_negative = get_subregions_by_label(
-        valid_data_by_resolution, region_sizes, step_fraction, keep_fraction
+        valid_data_by_resolution, region_sizes, negatives
     )
 
 
@@ -121,12 +121,11 @@ def load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_frac
 @click.option("--data_path", help="Path to the data folder.", required=True)
 @click.option("--batch_size", default=100, help="Size of the training batches.")
 @click.option("--region_sizes", default=[32,48,64], help="List of bounding box sizes.", multiple=True)
-@click.option("--step_fraction", default=0.1, help="Step between bounding boxes as a fraction of its size.")
-@click.option("--keep_fraction", default=0.01, help="Fraction of negative data to keep.")
-@click.option("--validation_fraction", default=0.1, help="Fraction of negative data to keep.")
-def preprocess_images(data_path, batch_size, region_sizes, step_fraction, keep_fraction, validation_fraction):
+@click.option("--negatives", default=10, help="Multiplies the number of negative samples. If 1, a single negative sample of each size is collected for each positive sample.")
+@click.option("--validation_fraction", default=0.1, help="Fraction of data separated for validation.")
+def preprocess_images(data_path, batch_size, region_sizes, negatives, validation_fraction):
 
-    train_data_positive, train_data_negative, valid_data_positive, valid_data_negative = load_npy_files(data_path, batch_size, region_sizes, step_fraction, keep_fraction, validation_fraction)
+    train_data_positive, train_data_negative, valid_data_positive, valid_data_negative = load_npy_files(data_path, batch_size, region_sizes, negatives, validation_fraction)
 
     print(f"Positive training data: {train_data_positive.shape}, negative: {train_data_negative.shape}")
     print(f"Positive validation data: {valid_data_positive.shape}, negative: {valid_data_negative.shape}")

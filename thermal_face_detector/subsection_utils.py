@@ -88,7 +88,7 @@ def extract_rescaled_subregions(
 
 
 def extract_training_data_with_nose(
-    image, labels, sizes, require_forehead=True
+    image, labels, sizes, negatives, require_forehead=True
 ):
     ''' Extracts regions around each labeled nose (label == 3)
     and optionally checks a forehead (label == 1) label exists in
@@ -130,7 +130,7 @@ def extract_training_data_with_nose(
             if found:
                 break
         
-    for i in range(0, len(subregions)*2):
+    for i in range(0, len(subregions)*negatives):
         for size in sorted(sizes):
             # Generate random negative subregions
             x = np.random.randint(image.shape[1])
