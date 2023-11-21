@@ -97,10 +97,6 @@ def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max
                     old_box["x"], old_box["y"],
                     old_box["width"], old_box["height"]
                 )
-                print()
-                print(box)
-                print(old_box)
-                print(box_iou(box, old_box))
                 if box_iou(box, old_box) > max_overlap:
                     # replace old box
                     box_dict["index"] = boxes[i]["index"]
@@ -114,12 +110,13 @@ def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max
                 next_box_index += 1
             frame_boxes.append(box_dict)
 
-        if len(boxes) > 0:
-            print(boxes)
+        # Boxes have moved so some might now overlap with existing boxes. 
         if len(frame_boxes) > 0:
             append_boxes_to_csv(frame_boxes, output_file)
 
         if frame_index == 0 or frame_index%scan_every == 0:
+            if len(boxes) > 0:
+                print(boxes)
             regions = [(box["x"], box["y"], box["width"], box["height"], box["score"]) for box in boxes]
             file_name = f"{os.path.basename(video_file).split('.')[0]}_{frame_index}.png"
             file_name = os.path.join(frame_images_dir, file_name)

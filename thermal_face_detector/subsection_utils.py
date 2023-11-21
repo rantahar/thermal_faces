@@ -273,8 +273,6 @@ def scan_matrix(model, matrix, scan_size, scan_margin = None, scan_step = 0.3, t
     regions_of_interest = apply_to_matrix(model, matrix, [scan_size], scan_step)
     regions_of_interest = [b for b in regions_of_interest if b[4] > threshold]
     regions_of_interest = non_max_suppression(regions_of_interest, 0)
-    print(f"{len(regions_of_interest)} potential regions")
-    print(regions_of_interest)
 
     return regions_of_interest
 
