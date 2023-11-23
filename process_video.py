@@ -29,8 +29,8 @@ def append_boxes_to_csv(boxes, file_path):
 
 
 @click.command()
-@click.option("--new_region_threshold", default=10, help="Threshold for detecting a new face in a bounding box.")
-@click.option("--update_threshold", default=5, help="Threshold for detecting a face in the next frame.")
+@click.option("--new_region_threshold", default=0, help="Threshold for detecting a new face in a bounding box.")
+@click.option("--update_threshold", default=0, help="Threshold for detecting a face in the next frame.")
 @click.option("--region_sizes", default=[32,48,64], help="Size of the bounding box.", multiple=True)
 @click.option("--step_fraction", default=0.1, help="Step between bounding boxes as a fraction of its size.")
 @click.option("--max_overlap", default=0.1, help="Maximum overlap (intersection over union) allowed between boxes.")
