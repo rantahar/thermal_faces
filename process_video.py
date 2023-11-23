@@ -111,6 +111,8 @@ def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max
             frame_boxes.append(box_dict)
 
         # Boxes have moved so some might now overlap with existing boxes. 
+        boxes = non_max_suppression(boxes, max_overlap)
+
         if len(frame_boxes) > 0:
             append_boxes_to_csv(frame_boxes, output_file)
 
