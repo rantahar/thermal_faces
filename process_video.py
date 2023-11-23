@@ -40,6 +40,15 @@ def append_boxes_to_csv(boxes, file_path):
 @click.option("--output_file", default=None, help="Output csv file.")
 @click.option("--frame_images_dir", default="frame_images", help="Folder for saving frame images")
 def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max_overlap, scan_every, video_file, model_file, output_file, frame_images_dir):
+    """ Processes each frame in a video file and saves the results to a CSV file.
+
+    For most frames, only known faces are processed. Occationally the entire frame is scanned
+    for new faces. The number of frames between scans is set by the scan_every parameter.
+
+    The output contains the x and y coordinates and the size of the bounding box, as well as
+    the last index of the frame, the confidence score of the detection and the temperature
+    at the center of the bounding box.
+    """
     if not os.path.exists(frame_images_dir):
         os.makedirs(frame_images_dir)
     
@@ -74,55 +83,46 @@ def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max
 
         # Scan for new faces every 100 frames, otherwise just
         # check existing boxes
-        regions = [(box["x"], box["y"], box["width"], box["height"], box["score"]) for box in boxes]
-        new_boxes = apply_to_regions(model, temperature, step_fraction, update_threshold, regions)
-        #print(f"new {len(new_boxes)}")
+        new_boxes = apply_to_regions(model, temperature, step_fraction, update_threshold, boxes)
 
         if frame_index == 0 or frame_index%scan_every == 0:
-            print("Scanning for new faces...")
+            print(f"Frame {frame_index}, scanning for new faces...")
             new_boxes += scan_and_apply(model, temperature, region_sizes, step_fraction, new_region_threshold)
             new_boxes = non_max_suppression(new_boxes, max_overlap)
 
         frame_boxes = []
         for box in new_boxes:
-            box_dict = {
-                "x": box[0], "y": box[1],
-                "width": box[2], "height": box[3],
-                "score": box[4], "frame": frame_index
-            }
             # identify the new boxes with existing ones
             found_box = False
             for i, old_box in enumerate(boxes):
-                old_box = (
-                    old_box["x"], old_box["y"],
-                    old_box["width"], old_box["height"]
-                )
                 if box_iou(box, old_box) > max_overlap:
                     # replace old box
-                    box_dict["index"] = boxes[i]["index"]
-                    boxes[i] = box_dict
+                    boxes[i] = (*box, old_box[5], frame_index)
                     found_box = True
                     break
             if not found_box:
                 # new box
-                box_dict["index"] = next_box_index
-                boxes.append(box_dict)
+                boxes.append((*box, next_box_index, frame_index))
                 next_box_index += 1
-            frame_boxes.append(box_dict)
+            frame_boxes.append((*box, next_box_index, frame_index))
 
         # Boxes have moved so some might now overlap with existing boxes. 
         boxes = non_max_suppression(boxes, max_overlap)
 
         if len(frame_boxes) > 0:
-            append_boxes_to_csv(frame_boxes, output_file)
+            regions = [{
+                "x": box[0], "y": box[1],
+                "width": box[2], "height": box[3],
+                "score": box[4], "index": box[5],
+                "frame": frame_index,
+                "central_temperature": temperature[box[1]+box[2]//2, box[0]+box[2]//2]
+            } for box in frame_boxes]
+            append_boxes_to_csv(regions, output_file)
 
         if frame_index == 0 or frame_index%scan_every == 0:
-            if len(boxes) > 0:
-                print(boxes)
-            regions = [(box["x"], box["y"], box["width"], box["height"], box["score"]) for box in boxes]
             file_name = f"{os.path.basename(video_file).split('.')[0]}_{frame_index}.png"
             file_name = os.path.join(frame_images_dir, file_name)
-            save_image_with_boxes(temperature, regions, file_name)
+            save_image_with_boxes(temperature, boxes, file_name)
 
 
 if __name__ == '__main__':
