@@ -19,7 +19,11 @@ The detection model is implemented in thermal_face_detector/reduce_model.py.
 ### Training
 
 Training data should be preprocessed using the process_data script. For this, the temperature frames should
-first be saved as individual numpy files (using numpy.save). For each numpy file, there should be a json file
+first be saved as individual numpy files (using numpy.save).
+
+Use the label_images script from https://github.com/rantahar/seq_file to generate the labeled data.
+
+For each numpy file, there should be a json file
 with same base name should that contains labels. For example, the temperature data could be in a file names
 `frame_100.npy` and the json file `frame_100.json` should contain labels in the following format:
 
