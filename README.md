@@ -76,6 +76,21 @@ python apply_to_subframe.py --image_file data/frame_1.npy --model_file saved/100
 
 This will display the image with labeled regions.
 
+## How it works (aka details)
+
+### Data extraction
+
+The face detection pipeline relies on a model that detects the existance of a face in an image. To train this model,
+we must extract positive and negative examples from the training data. Positive samples are based on the manually
+generated labels provided by the user. For each labeled nose, we extract positive example region a forehead is also
+labeled reasonable close above the nose label. The example image is rescaled to the desired training size.
+
+Negative examples are randomly selected from each frame. They contain all possible region sizes and are rescaled to
+the desired size. Since the video frames will contain many more negative than positve examples, for efficiency of
+training, we use several negative examples for each positive example. However, the ratio of positive to negative
+cannot reasonably match the actual ratio.
+
+
 
 
 
