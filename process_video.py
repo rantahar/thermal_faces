@@ -34,12 +34,18 @@ def append_boxes_to_csv(boxes, file_path):
 @click.option("--region_sizes", default=[32,48,64], help="Size of the bounding box.", multiple=True)
 @click.option("--step_fraction", default=0.1, help="Step between bounding boxes as a fraction of its size.")
 @click.option("--max_overlap", default=0.1, help="Maximum overlap (intersection over union) allowed between boxes.")
+@click.option("--region_margin", default=0.05, help="Margin around the detection region sent to the detection model.")
 @click.option("--scan_every", default=1000, help="Number of frames between scanning for new faces.")
 @click.option("--video_file", help="Path to a video file.", required=True)
 @click.option("--model_file", help="Path to the model file.", required=True)
 @click.option("--output_file", default=None, help="Output csv file.")
 @click.option("--frame_images_dir", default="frame_images", help="Folder for saving frame images")
-def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max_overlap, scan_every, video_file, model_file, output_file, frame_images_dir):
+def run(
+    new_region_threshold, update_threshold,
+    region_sizes, step_fraction, max_overlap, region_margin
+    scan_every, video_file, model_file,
+    output_file, frame_images_dir,
+):
     """ Processes each frame in a video file and saves the results to a CSV file.
 
     For most frames, only known faces are processed. Occationally the entire frame is scanned
@@ -83,7 +89,7 @@ def run(new_region_threshold, update_threshold, region_sizes, step_fraction, max
 
         # Scan for new faces every 100 frames, otherwise just
         # check existing boxes
-        new_boxes = apply_to_regions(model, temperature, step_fraction, update_threshold, boxes)
+        new_boxes = apply_to_regions(model, temperature, step_fraction, update_threshold, boxes, margin=box_margin, max_overlap=max_overlap)
 
         if frame_index == 0 or frame_index%scan_every == 0:
             print(f"Frame {frame_index}, scanning for new faces...")
